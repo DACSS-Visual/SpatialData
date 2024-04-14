@@ -1,0 +1,438 @@
+
+<br> 
+<center><img src="http://i.imgur.com/sSaOozN.png" width="500"></center>
+
+## Course: Visual Analytics for Policy and Management
+
+### Prof. José Manuel Magallanes, PhD 
+
+_____
+<a id='part1'></a>
+
+# Session 4: [Spatial Data](https://github.com/EvansDataScience/Visualization_Spatial)
+
+_____
+
+
+
+```{r, eval=TRUE}
+library(sf)
+
+zipMap=sf::read_sf("wazipMap.gpkg", layer='zips')
+
+#
+head(zipMap)
+```
+
+The map is about zipcodes in WA state:
+
+```{r, warning=FALSE}
+
+library(ggplot2)
+
+base=ggplot(data = zipMap)
+base + geom_sf()
+
+```
+
+```{r, warning=FALSE}
+
+library(ggplot2)
+
+base=ggplot(data = zipMap)
+base + geom_sf(aes(fill=POP2005))
+
+```
+```{r}
+
+zipMap$area_km2=units::drop_units(units::set_units(st_area(st_make_valid(zipMap)),'km2'))
+zipMap$POP2005_density=zipMap$POP2005/zipMap$area_km2
+
+base=ggplot(data = zipMap)
+choroPop=base + geom_sf(aes(fill=POP2005_density),color=NA,size=0)
+choroPop
+
+```
+
+```{r}
+choroPop+ scale_fill_continuous(trans = 'reverse')
+```
+```{r}
+choroPop+ scale_fill_viridis_c(direction = -1)
+```
+
+
+```{r}
+
+base + geom_sf(aes(fill=POP2015-POP2005),color=NA,size=0)
+
+```
+```{r}
+base + geom_sf(aes(fill=POP2015/POP2005),color=NA,size=0) + scale_fill_viridis_c(direction = -1, option = 'B')
+
+```
+
+
+
+Let's work with the data on contributions to Candidates and Political Committees in Washington State. 
+
+The WA [portal](https://data.wa.gov/) for OpenData has this data on this [website](https://data.wa.gov/Politics/Contributions-to-Candidates-and-Political-Committe/kv7h-kjye).
+
+
+
+```{r, eval=TRUE}
+link='https://github.com/EvansDataScience/data/raw/master/contriWA.RData'
+#getting the data TABLE from the file in the cloud:
+load(file=url(link))
+```
+
+
+This is what we have:
+
+```{r, eval=TRUE}
+str(contriWA,width = 60, strict.width = 'cut')
+```
+
+The data is per year, so let's check the years available:
+
+```{r}
+table(contriWA$party)
+```
+
+
+
+## Adding information from data frame
+
+
+When you have a way to organize you data by a row that represents a **geographical unit**, you can plot your data on a map. However, in the current format, each row represents a contribution; we do not need that, we need a data frame where each row is ZIP code, and the amount tells us, for example, the average contribution generated in that location. This is an **aggregation** process:
+
+```{r, eval=TRUE}
+contriWA_RepDem=contriWA[contriWA$party%in%c('DEMOCRAT','REPUBLICAN'),]
+contriWA_RepDem$party=droplevels(contriWA_RepDem$party)
+
+library(dplyr)
+contriWA_RepDem %>%
+  group_by(contributor_zip, election_year, party) %>%
+  summarise_at(vars(amount), list(amount_sum=sum,
+                                  counts=length,
+                                  amount_perCap=mean)) ->zipContrib_aggrtd
+
+head(zipContrib_aggrtd)
+```
+
+
+
+```{r}
+library(tidyr)
+
+zipContrib_aggrtd %>% 
+    pivot_wider(names_from = party,
+                values_from = c(amount_sum,
+                                counts,
+                                amount_perCap)) -> zipContrib_aggrtd_wide
+    
+head(zipContrib_aggrtd_wide)
+```
+
+
+
+```{r}
+
+#0 instead of missing
+zipContrib_aggrtd_wide[is.na(zipContrib_aggrtd_wide)] <- 0
+
+totalParty=(zipContrib_aggrtd_wide$counts_DEMOCRAT + zipContrib_aggrtd_wide$counts_REPUBLICAN)
+zipContrib_aggrtd_wide$DEMOCRAT_prop=zipContrib_aggrtd_wide$counts_DEMOCRAT/totalParty
+zipContrib_aggrtd_wide$REPUBLICAN_prop=zipContrib_aggrtd_wide$counts_REPUBLICAN/totalParty
+
+zipContrib_aggrtd_wide$DEMOCRAT_prop=100*round(zipContrib_aggrtd_wide$DEMOCRAT_prop,2)
+zipContrib_aggrtd_wide$REPUBLICAN_prop=100*round(zipContrib_aggrtd_wide$REPUBLICAN_prop,2)
+```
+
+
+
+Let's plan the merge:
+
+
+```{r, eval=TRUE}
+str(zipMap)
+```
+
+Now TO the map:
+
+
+```{r, eval=TRUE}
+zipContrib_aggrtd_wide$contributor_zip=as.character(zipContrib_aggrtd_wide$contributor_zip)
+
+contrib_zipMap=merge(zipMap,zipContrib_aggrtd_wide,
+                     by.x='ZCTA5CE10', by.y='contributor_zip')
+
+head(contrib_zipMap)
+```
+
+There is a new map: *contrib_zipMap*.
+
+
+Let's explore the contributions for 2015:
+
+```{r, eval=TRUE}
+contrib_zipMap2015=contrib_zipMap[contrib_zipMap$election_year==2015,]
+
+
+base=ggplot(data = zipMap) + theme_light() + geom_sf(fill='grey90') 
+base + geom_sf(data=contrib_zipMap2015,
+               aes(fill=amount_sum_DEMOCRAT)) + 
+                scale_fill_viridis_c(direction = -1)
+```
+
+```{r, eval=TRUE}
+base + geom_sf(data=contrib_zipMap2015,
+               aes(fill=amount_perCap_DEMOCRAT)) + 
+                scale_fill_viridis_c(direction = -1) +
+                 labs(fill='DEM_Contribution PerCap \n (grey:no contribution)')
+```
+
+Let's explore the involvement for 2015:
+
+```{r, eval=TRUE}
+base + geom_sf(data=contrib_zipMap2015,
+               aes(fill=counts_REPUBLICAN)) + 
+                scale_fill_viridis_c(direction = -1)
+```
+
+```{r, eval=TRUE}
+base + geom_sf(data=contrib_zipMap2015,
+               aes(fill=REPUBLICAN_prop)) + 
+                scale_fill_viridis_c(direction = -1) +
+                 labs(fill='REP% \n (grey:no REP contributors)')
+```
+
+Discretizing
+
+Let me organize the DEM contributions for 2015 as five categories (5 quantiles). Let's follow these steps:
+
+1. Make sure you have:
+
+```{r, eval=TRUE,warning=FALSE,message=FALSE,results='hide'}
+# install.packages("RColorBrewer")
+# install.packages("classInt")
+```
+
+
+2. Get colors and intervals (you can choose palettes from [here](http://colorbrewer2.org/)). Notice we are choosing a particular [classification method](https://www.axismaps.com/guide/data/data-classification/) known as _quantile classification_: 
+
+```{r, eval=TRUE}
+numberOfClasses = 5
+
+varToPLot=contrib_zipMap2015$amount_perCap_DEMOCRAT
+
+colors = RColorBrewer::brewer.pal(numberOfClasses, colorForScale)
+
+intervals <- classInt::classIntervals(varToPLot, numberOfClasses,
+                            style = "jenks",
+                            dataPrecision=2)
+```
+
+```{r}
+
+contrib_zipMap2015$amount_perCap_DEMOCRAT_cat=classInt::findCols(intervals,factor = T)
+
+base + geom_sf(data=contrib_zipMap2015,
+               aes(fill=amount_perCap_DEMOCRAT_cat)) + scale_fill_brewer(palette = "YlOrRd")
+
+```
+Choose  sequential palette from [here](https://ggplot2.tidyverse.org/reference/scale_brewer.html).
+
+```{r}
+newNames=c("veryLow","Low","Good","VeryGood","ExtremelyGood")
+levels(contrib_zipMap2015$amount_perCap_DEMOCRAT_cat)=newNames
+
+DEMmap= base + 
+            geom_sf(data=contrib_zipMap2015,
+                    aes(fill=amount_perCap_DEMOCRAT_cat)) + 
+                scale_fill_brewer(palette = "PuBuGn") +
+                    labs(fill="DEM contributions perCap")
+DEMmap
+```
+
+```{r}
+library(ggspatial)
+
+DEMmap + annotation_scale(location = "bl", width_hint = 0.2) +
+    annotation_north_arrow(location = "tl", which_north = "true",
+        style = north_arrow_fancy_orienteering)
+```
+
+
+
+For sure, you can use leaflet:
+
+```{r, eval=TRUE}
+# function for COLORING quantiles in leaflet
+library(leaflet)
+paletteFun=colorFactor(palette = "YlOrRd", 
+                       domain = contrib_zipMap2015$amount_perCap_DEMOCRAT_cat)
+
+# the base map
+base_map = leaflet() %>% addTiles()
+
+final = base_map %>%
+         addPolygons(data=contrib_zipMap2015,
+                     weight = 0, #thickness of border
+                     opacity =  1, # # the closer to 0 the more transparent
+                     fillOpacity = 0.8, # color brigthness
+                     fillColor = ~paletteFun(amount_perCap_DEMOCRAT_cat)) # coloring
+
+final
+```
+
+You must add a legend:
+```{r, eval=TRUE}
+final %>% addLegend(data=contrib_zipMap2015,
+                    "bottomright",
+                    pal = paletteFun, 
+                    values = ~amount_perCap_DEMOCRAT_cat,
+                    title = "DEM Contributions",
+                    opacity = 1) 
+
+```
+
+
+
+```{r, eval=TRUE}
+
+mapBottom=contrib_zipMap2015[contrib_zipMap2015$amount_perCap_DEMOCRAT_cat%in%c('VeryLow','Low'),]
+mapTop=contrib_zipMap2015[contrib_zipMap2015$amount_perCap_DEMOCRAT_cat%in%c('VeryGood','ExtremelyGood'),]
+
+base= leaflet() %>% addProviderTiles("CartoDB.Positron") 
+layer1= base %>%
+        addPolygons(data=mapBottom,
+                    color='yellow',fillOpacity = 1,stroke = F,
+                    group = "Bottom")
+layer_1_2= layer1%>%addPolygons(data=mapTop,color="red",fillOpacity = 1,stroke = F,
+                              group = "Top")
+
+layer_1_2
+```
+
+
+```{r, eval=TRUE}
+textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
+
+final= layer_1_2 %>%
+    addEasyButton(
+        easyButton(icon="fa-home", # a symbol
+                   title="Zoom to Level 1",
+                   onClick=JS(textFun)))
+
+final
+```
+
+We can use an interactive legend:
+
+```{r, eval=TRUE}
+final %>% addLayersControl(
+        overlayGroups = c("Top", "Bottom"),
+        options = layersControlOptions(collapsed = FALSE))
+```
+
+```{r}
+contrib_zipMap_12_16=contrib_zipMap[contrib_zipMap$election_year%in%c(2012,2016),]
+
+
+
+
+base=ggplot(data = zipMap) + theme_light() + geom_sf(fill='grey90', color=NA) 
+base + geom_sf(data=contrib_zipMap_12_16,
+               aes(fill=amount_sum_DEMOCRAT),color=NA) + 
+                scale_fill_viridis_c(direction = -1) + facet_grid(~election_year)
+```
+
+
+
+## Plotting coordinates:
+
+The dataframe _contriWA_ has columns with coordinates, let's turn that data frame into a _spatial point data frame_, while making sure it has the same  coordinate system as our map:
+
+```{r, eval=TRUE, warning=FALSE}
+library(raster)
+
+mapCRS=crs(zipMap) # projection of our map
+dataSub=contriWA_RepDem[contriWA_RepDem$election_year%in%c(2012,2016),]
+contriWA_geo_12_16=st_as_sf(dataSub, coords = c("Lon","Lat"), remove = FALSE,crs=mapCRS)
+```
+
+Our new spatial _points_ dataframe looks the same:
+```{r, eval=TRUE}
+names(contriWA_geo_12_16)
+```
+
+But it is not a simple data frame:
+
+```{r, eval=TRUE}
+class(contriWA_geo_12_16)
+```
+
+You can see the geographical details with this:
+
+```{r, eval=TRUE, warning=FALSE}
+library(tmaptools)
+get_proj4(mapCRS)
+```
+
+Now, plot the new map (select the right character for the [point](http://www.endmemo.com/program/R/pchsymbols.php)) on top of our WA state map:
+
+
+```{r}
+base=ggplot(data = zipMap) + theme_light() + geom_sf(fill='grey90', color='white') 
+base + geom_sf(data=contriWA_geo_12_16, size=0.5,alpha=0.5,
+               aes(color=party)) 
+```
+
+```{r}
+base + geom_sf(data=contriWA_geo_12_16, size=0.2,alpha=0.1, color='blue')  + facet_grid(~party)
+```
+
+**Leaflet** is a good option too:
+
+```{r, eval=TRUE,warning=FALSE}
+library(leaflet)
+
+
+leaflet(contriWA_geo_12_16) %>% 
+    addTiles() %>% 
+    addCircleMarkers(clusterOptions = markerClusterOptions())
+```
+
+```{r, eval=TRUE,warning=FALSE}
+
+leafDEMO=leaflet(contriWA_geo_12_16[contriWA_geo_12_16$party=='DEMOCRAT',]) %>% 
+    addTiles() %>% 
+    addCircleMarkers(clusterOptions = markerClusterOptions())
+```
+
+```{r, eval=TRUE,warning=FALSE}
+textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
+
+
+leafREPU=leaflet(contriWA_geo_12_16[contriWA_geo_12_16$party=='REPUBLICAN',]) %>% 
+    addTiles() %>% 
+    addCircleMarkers(clusterOptions = markerClusterOptions())%>%
+    
+    # adding the button
+    addEasyButton(
+        easyButton(icon="fa-home", # a symbol
+                   title="Zoom to Level 1",
+                   onClick=JS(textFun)))
+
+```
+
+```{r}
+library(leafsync)
+sync(leafDEMO,leafREPU,ncol = 2)
+```
+
+
+
+
+
