@@ -281,6 +281,7 @@ base + geom_sf(data=contrib_zipMap,
                         facet_grid(~election_year)
                 
 ```
+
 Again, a choropleth should represent, in this case, an average:
 
 ```{r, eval=TRUE}
@@ -301,14 +302,16 @@ base + geom_sf(data=contrib_zipMap,
                     facet_grid(~election_year) +
                         scale_fill_viridis_c(direction = -1)
 ```
+
 A better version can be a _proportion_:
+
 ```{r, eval=TRUE}
 #  normalized
 base + geom_sf(data=contrib_zipMap,
                aes(fill=REPUBLICAN_prop)) + 
                 scale_fill_viridis_c(direction = -1) +
                     facet_grid(~election_year) +
-                        labs(fill='REP% \n (grey:no information)')
+                        labs(fill='REP% \n (red:no information)')
 ```
 
 # Discretizing
