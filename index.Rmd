@@ -21,6 +21,8 @@ _____
 
 5. [Interactive maps](#part5) 
 
+6. [Homework #3](#part6) 
+
 
 _____
 
@@ -47,7 +49,9 @@ zipMap=sf::read_sf(link, layer='zips')
 head(zipMap)
 ```
 
-These are the variables available:
+As you in the link above, the map is in a file **wazipMap.gpkg**. The extension _.gpkg_ is a common one for maps. Other ver well known are **.shp** for _shapefiles_, and **.geojson** or simply **.json** for _geojson_ files. You use links to access _gpkg_ or _geojson_ files in R, but it might not work for _shp_ files. Shapefiles are in fact a collection of files instead of one, so it is more convenient to export _shp_ files into the other options if your plan demands reading from a website. All of these files are read with the same command:**read_sf()**. Notice that we used the argument **layer** when reading a _gpkg_, but it will not be needed in other cases.
+
+The object **zipMap** has these variables:
 ```{r}
 names(zipMap)
 ```
@@ -60,8 +64,8 @@ We can see the polygond like this using _ggplot2_:
 
 library(ggplot2)
 
-base=ggplot(data = zipMap)
-base + geom_sf(fill='black')
+base=ggplot(data = zipMap) # map to use
+base + geom_sf(fill='black') # plot the geometry
 
 ```
 
@@ -84,21 +88,29 @@ Coloring polygons is very easy, but that also may cause interpretation problems.
 
 ```{r}
 base=ggplot(data = zipMap)
-base + geom_sf(aes(fill=POP2005),color=NA) + scale_fill_viridis_c(direction = -1)
+base + geom_sf(aes(fill=POP2005), #variable for coloring geometry
+               color=NA) + # no borders
+    scale_fill_viridis_c(direction = -1) # color map
 ```
 
-The map above is plotting the counts as they are, in their raw form. Plotting counts, in general, tends to a biased viz: the color intensity is correlating visually with the area size (you may review [this article](https://www.esri.com/about/newsroom/arcuser/understanding-statistical-data-for-mapping-purposes/) for further details). 
+The map above is plotting the counts as they are, in their raw form. Plotting counts, in general, prodcues a biased viz: the color intensity is correlating visually with the area size (you may review [this article](https://www.esri.com/about/newsroom/arcuser/understanding-statistical-data-for-mapping-purposes/) for further details). 
 
-Counts are not a property of the geometry as a whole, if you split the polygon, the count varies. Then we should do some basic transformations:
+Counts are not a property of the geometry as a whole, if you split the polygon, the count varies. Then, we should do some basic transformations:
 
 ## Densities
 
 
-If you use population _density_ instead of _counts_, you derive a value that will deal better with the correlation of counts and area. Our map does not inform about the area of the polygon, but you can compute it like this:
+If you use population _density_ instead of _counts_, you derive a value that will deal better with the correlation of counts and area. Let's use the polygon to compute the area in _Km2_:
 
 ```{r}
-# we need library "units"
-zipMap$area_km2=units::drop_units(units::set_units(st_area(st_make_valid(zipMap)),'km2'))
+#### we need library "units"
+# st_make_valid(): make sure polygons are 'valid'
+# st_area(): compute the area
+# set_units(): give a unit to the area    
+# drop_units(): keep the value (number) and drop the rest
+
+library(units)
+zipMap$area_km2=drop_units(set_units(st_area(st_make_valid(zipMap)),'km2'))
 
 # now compute pop density
 zipMap$POP2005_density=zipMap$POP2005/zipMap$area_km2
@@ -110,7 +122,7 @@ Plotting the density:
 ```{r}
 
 base=ggplot(data = zipMap) # reload - you have a new variable
-choroPop=base + geom_sf(aes(fill=POP2005_density),color=NA,size=0)
+choroPop=base + geom_sf(aes(fill=POP2005_density),color=NA)
 
 # right plot
 choroPop + scale_fill_viridis_c(direction = -1)
@@ -119,12 +131,12 @@ choroPop + scale_fill_viridis_c(direction = -1)
 
 ## Rates instead of differences
 
-Let me seek to represent _change_ using a **difference**:
+Let me represent _change_ using a **difference**:
 
 ```{r}
 # difference as substraction
-base + geom_sf(aes(fill=POP2015-POP2005),color=NA,size=0) + 
-     scale_fill_viridis_c(direction = -1, option = 'B')
+base + geom_sf(aes(fill=POP2015-POP2005),color=NA) + 
+     scale_fill_viridis_c(direction = -1, option = 'B') # B?
 
 ```
 
@@ -133,7 +145,8 @@ This is a better way:
 ```{r}
 
 # difference as rate
-base + geom_sf(aes(fill=POP2015/POP2005),color=NA,size=0) + scale_fill_viridis_c(direction = -1, option = 'B')
+base + geom_sf(aes(fill=POP2015/POP2005),color=NA) + 
+       scale_fill_viridis_c(direction = -1, option = 'B') 
 
 ```
 
@@ -164,6 +177,8 @@ Let's take a look at these data on contributions to Candidates and Political Com
 ```{r, eval=TRUE}
 linkData='https://github.com/DACSS-Visual/SpatialData/raw/main/data/contriWA.RData'
 load(url(linkData))
+
+# THIS IS NOT A MAP
 head(contriWA)
 ```
 
@@ -205,25 +220,38 @@ contriWA_1216_RD$party=droplevels(contriWA_1216_RD$party)
 ```
 
 
-When you have a way to organize you data by a row that represents a **geographical unit**, you can plot your data on a map. However, in the current format, each row represents a _contribution_ not a _place_; we do not need that, we need a data frame of _contributions_ where each row is a _ZIP code_, and the amount tells us, for example, the average contribution generated in that location. This is an **aggregation** process:
+When you have a way to organize your data by a row that represents a place, location, or generally speking a **geometry**, you can plot your data on a map. However, in the current format, each row represents a _contribution_ but has no _geometry_ associated to that value. 
+However, you can merge (add) these data into the map we have. If our map is about zip codes, we must use create a dataframe by ZIP code from the data frame on _contributions_. This is an **aggregation** process:
 
 ```{r, eval=TRUE, message=FALSE, warning=FALSE}
 
 library(dplyr)
-contriWA_1216_RD %>%
-  group_by(contributor_zip, election_year, party) %>%
-  summarise_at(vars(amount), list(counts=length,
-                                  amountPerCap=mean)) ->contribsWA_agg
 
+# using columns 'amount'
+# 'counts':how many contributors
+# 'amountPerCap': mean contribution
+
+# all grouped  by zip, year and party
+
+contribsWA_agg= contriWA_1216_RD %>%
+                    group_by(contributor_zip, election_year, party) %>%
+                        summarise_at(vars(amount),
+                                     list(counts=length,
+                                          amountPerCap=mean))
+# see results:
 head(contribsWA_agg)
 ```
 
-Let me use the _counts_ to compute the proportion of contributions going to a particular party:
+
+Let me use the column _counts_ to compute the proportion of contributions going to a particular party. After that, we do not need _counts_ anymore:
+
 ```{r}
 contribsWA_agg %>%
   group_by(contributor_zip, election_year) %>%
 
   mutate(percentage = counts / sum(counts) * 100) ->contribsWA_agg
+
+contribsWA_agg$counts=NULL
 ```
 
 Here, we may find that some zips in the contribution data may not be present in the map of zip codes:
@@ -238,13 +266,6 @@ length(setdiff(zipMap$ZCTA5CE10,contribsWA_agg$contributor_zip))
 ```
 We will only work with what is common in both.
 
-Since _counts_ in not normalized:
-
-```{r}
-# bye!
-contribsWA_agg$counts=NULL
-```
-
 
 It is time to merge the data into the map:
 
@@ -252,8 +273,11 @@ It is time to merge the data into the map:
 ```{r, eval=TRUE}
 
 # map to the left!
+# never: merge(contribsWA_agg,zipMap...)
+
 contrib_zipMap=merge(zipMap,contribsWA_agg,
-                     by.x='ZCTA5CE10', by.y='contributor_zip')
+                     by.x='ZCTA5CE10', # 
+                     by.y='contributor_zip')
 # you see
 head(contrib_zipMap)
 ```
@@ -264,132 +288,187 @@ There is a new map: *contrib_zipMap*.
 Let's explore the contributions percapita:
 
 ```{r, eval=TRUE}
-# normalized
+
 base=ggplot() + theme_void() 
 base + geom_sf(data=contrib_zipMap,
                aes(fill=amountPerCap)) + 
        scale_fill_viridis_c(direction = -1,
-                            na.value = 'red') +
+                            na.value = 'red') + # missing in red?
        facet_grid(party~election_year) +
        labs(fill='Contribution PerCap \n (red:no information)') 
 ```
-Notice above that the long format does not have missing values, so a better way to see them would be to create a map of all the zipcodes available:
 
-```{r}
-sf_use_s2(FALSE)
-plot(st_union(zipMap))
-st_make_valid(zipMap)
+Notice above that the long format does not have missing values (no _red_ areas), so a better way to see them would be use another layer (map):
+
+```{r, message=FALSE}
+# another map, just boundaries.
+wa_simple=read_sf('https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/maps/WA_State_Boundary.geojson')
+
+#then
+base=ggplot(wa_simple) + geom_sf(fill='white')+theme_void() # the new map
+base + geom_sf(data=contrib_zipMap,
+               aes(fill=amountPerCap),color=NA) + # no border
+       scale_fill_viridis_c(direction = -1) +
+       facet_grid(party~election_year) +
+       labs(fill='Contribution PerCap \n (white:no information)') 
+
+
 ```
-
 
 
 Let's explore the involvement of Republicans using the _proportion_ (while playing with the legend):
 
 ```{r, eval=TRUE}
-#  normalized
+
 base + geom_sf(data=contrib_zipMap,
-               aes(fill=REPUBLICAN_prop),na.rm = T) + 
-                scale_fill_viridis_c(direction = -1,na.value = 'red') +
-                    facet_grid(~election_year) +
-                        labs(fill='Republicans Involvement(%) \n (red:no information)') +
+               aes(fill=percentage),color=NA) + 
+                scale_fill_viridis_c(direction = -1) +
+                    facet_grid(party~election_year) +
+                        labs(fill='Involvement (%) \n (white:no information)') +
               theme(legend.title = element_text(size=8,
                                                 hjust = 0.5),#center
                     legend.position = "bottom",
                     legend.key.width = unit(1, "cm")) + # value to modify
     guides(fill = guide_colourbar(title.position="top"))
 ```
-As you see there are some zipcodes that have no information. Let me keep those to save some processing time:
-```{r}
-contrib_zipMap[contrib_zipMap$amount_perCap_DEMOCRAT==0,]
-```
+
+I still find it difficult to say something interesting in the title. Then, using **discretization** may help me more in this situation.
 
 # Discretizing
 
-Let me organize the DEM contributions into three categories. Let's follow these steps:
+Let me organize the contributions into four categories. Let's follow these steps to _discretize_ **amountPerCap**:
 
-1. Make sure you have the package **classInt**:
+1. Explore the variable to find cutpoints. 
 
-```{r, eval=TRUE,warning=FALSE,message=FALSE,results='hide'}
-#if not:
-# install.packages("classInt")
-```
-
-
-2. Cut the Variable. Notice there are several [classification methods](https://www.rdocumentation.org/packages/classInt/versions/0.4-10/topics/classIntervals) to cut a numeric variable into discrete groups: 
+First let's find out the distribution using _fivenum_ function (minimum, lower-hinge, median, upper-hinge, maximum)
 
 ```{r}
-# how many intervals?
-numberOfClasses = 3
-
-library(classInt)
-
-demCuts2012 <- classIntervals(contrib_zipMap[contrib_zipMap$election_year==2012,
-                                             ]$amount_perCap_DEMOCRAT,
-                          numberOfClasses,style = 'quantile')
-demCuts2016 <- classIntervals(contrib_zipMap[contrib_zipMap$election_year==2016,
-                                             ]$amount_perCap_DEMOCRAT,
-                          numberOfClasses,style = 'quantile')
-# the cut breaks for 2012
-demCuts2012$brks
+do.call(data.frame,aggregate(data=contrib_zipMap,
+                             amountPerCap~election_year +party,fivenum))
 ```
+
+Base on this exploration, I am planing to cut the variable using the _powers of 10_:
 ```{r}
-# the cut breaks for 2016
-demCuts2016$brks
+ggplot(contrib_zipMap)+ aes(x=amountPerCap) + geom_density() + facet_wrap(~election_year +party,ncol = 1) + scale_x_log10()
 ```
 
+
+
+2. Cut the variable:
 
 Based on that information, let me customize the cuts:
-
 ```{r}
-customCuts=c(0,100,1000,5000)
-contrib_zipMap$amount_perCap_DEMO_cat=cut(contrib_zipMap$amount_perCap_DEMOCRAT,
-                                          breaks=customCuts,include.lowest = T,
-                                          dig.lab = 4)
-
-# see the distribution
-table(contrib_zipMap$amount_perCap_DEMO_cat,contrib_zipMap$election_year)
+# vector of data breaks
+customCuts=c(0,10,100,1000,10000)
 ```
 
-It is also good to prepare labels for levels:
+Now create the discrete version:
+```{r}
+contrib_zipMap$amount_perCap_cat=cut(contrib_zipMap$amountPerCap,
+                                          breaks=customCuts,include.lowest = F,
+                                          dig.lab = 5)
+#
+#
+# see the distribution
+table(contrib_zipMap$amount_perCap_cat,contrib_zipMap$election_year,contrib_zipMap$party)
+```
+
+As you see above, there is at least one value in each. The outlying values are few, and the most common one are clearly identified.
+
+Let me also prepare some _labels_ for levels (which could be used in the legend):
 
 ```{r, eval=TRUE}
-# we should prepare a column with simpler names:
-theLevels=c("Low","Medium", "High")
+# labels
+theLabelsForLevels=c("upTo_10",">10_to100", ">100_to1000", 'MoreThan_1000')
 
 #the new var:
-contrib_zipMap$amount_perCap_DEMO_catLabel=contrib_zipMap$amount_perCap_DEMO_cat
+contrib_zipMap$amount_perCap_catLabel=contrib_zipMap$amount_perCap_cat
 
 # as they are factor, we can change level labels
-levels(contrib_zipMap$amount_perCap_DEMO_catLabel)=theLevels
+levels(contrib_zipMap$amount_perCap_catLabel)=theLabelsForLevels
 
 # see some
-head(contrib_zipMap$amount_perCap_DEMO_catLabel,10)
+head(contrib_zipMap$amount_perCap_catLabel,10)
 
 ```
 
 Let's plot (choose  sequential palette from [here](https://ggplot2.tidyverse.org/reference/scale_brewer.html)). Here we use the intervals:
 
 ```{r}
-base=ggplot(data = zipMap) + theme_light() + 
-        geom_sf(fill='black') # black polygon is NO
+
 base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_DEMO_cat),color=NA) + 
-               labs(fill='AMOUNT PERCAPITA\nNo contributions in Black',
-                    title='Reduction of democratic counties contributing',
-                    subtitle='WA State counties, contribution in 2012 & 2016')+
+               aes(fill=amount_perCap_cat),color=NA) + 
+               labs(fill="US$ PerCapita \nAreas with NO Info in white",
+                    title='Contributions to Republicans and Democrats: Not much difference',
+                    subtitle='WA State zip boundaries, contribution in 2012 & 2016')+
                     scale_fill_brewer(palette = "YlOrRd") +
-                        facet_grid(~election_year)
+                        facet_grid(party~election_year) 
 
 ```
+
+Here, the difference is only in the labels of the legend and the legend placement:
 ```{r}
 base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_DEMO_cat),color=NA) + 
-               labs(fill='LEVEL PERCAPITA\nNo contributions in Black',
-                    title='Reduction of democratic counties contributing',
-                    subtitle='WA State counties, contribution in 2012 & 2016')+
+               aes(fill=amount_perCap_catLabel),color=NA) + 
+               labs(fill="US$ PerCapita \nAreas with NO Info in white",
+                    title='Contributions to Republicans and Democrats: Not much difference',
+                    subtitle='WA State zip boundaries, contributions in 2012 & 2016')+
                     scale_fill_brewer(palette = "YlOrRd") +
-                        facet_grid(~election_year)
+                        facet_grid(party~election_year) +
+    theme(legend.position = "left")
 ```
+
+How to highlight the least common?
+
+* You need to customize the color:_scale_fill_manual()_
+
+```{r}
+# your colors;
+customCols=c("black", "grey80", "grey90","red")
+
+base + geom_sf(data=contrib_zipMap,
+               aes(fill=amount_perCap_catLabel),color=NA) + 
+               labs(fill="US$ PerCapita \nAreas with NO Info in white",
+                    title='The least common contributions',
+                    subtitle='WA State counties, contribution in 2012 & 2016')+
+                    scale_fill_manual(values = customCols) +
+                        facet_grid(party~election_year) +
+    theme(legend.position = "left")
+```
+
+What about annotating? Let's use *geom_sf_text*:
+
+Notice that you need the the zipcodes of interest, so let's subset:
+```{r}
+ZipOk=c("upTo_10",'MoreThan_1000')
+contrib_zipMap_SUB=contrib_zipMap[contrib_zipMap$amount_perCap_catLabel%in%ZipOk,]
+```
+
+
+```{r, warning=FALSE}
+#
+
+base + geom_sf(data=contrib_zipMap,
+               aes(fill=amount_perCap_catLabel),color=NA) + 
+               labs(fill="US$ PerCapita \nAreas with NO Info in white",
+                    title='Top contributions increasing for democrats in 2016',
+                    subtitle='WA State counties, contribution in 2012 & 2016',
+                    caption="Source: WA State Open Data (https://data.wa.gov/)")+
+                    scale_fill_manual(values = customCols) +
+                        facet_grid(party~election_year) +
+    theme(legend.position = "left") +
+    # annotating
+    geom_sf_text(data=contrib_zipMap_SUB,
+                 aes(label=ZCTA5CE10,
+                     color=amount_perCap_catLabel),
+                 check_overlap = T,
+                 size=1.5,
+                 nudge_y = 0.15) +
+            scale_colour_manual(values=c("black", "red")) + 
+            guides(color=F)
+```
+
+As you see, mapping may look easy, but most of the time it takes a while to find something to communicate. Let's stop this case here.
 
 <!-- To avoid the previous problem with _gridExtra_: -->
 
@@ -420,7 +499,7 @@ ________________
 
 # Plotting coordinates
 
-The dataframe _contriWA_ has columns with coordinates, let's turn that data frame into a _spatial points data frame_, while making sure it has the same  coordinate system as our map:
+The dataframe _contriWA_ has columns with coordinates (lon/lat), let's turn that data frame into a _spatial points data frame_, while making sure it has the same  coordinate system as our map:
 
 ```{r, eval=TRUE, warning=FALSE, message=FALSE}
 library(raster)
@@ -464,6 +543,7 @@ contributors=base +
 contributors
 ```
 
+Again, you created a map, but it is difficult to say a clear message. Notice the vocabulary for this last case would use _East_, _West_, _North_, _South_, etc. But no salient patter is detected (i.e. you can not say 'nobody likes Y in the West'). A better choice would have been select a particular county.
 _____
 
 
@@ -477,110 +557,193 @@ ________________
 
 # Interactive maps
 
-Interactive maps are useful when you need zooming:
+Interactive maps are useful when you need zooming in. I will use **leaflet** library:
 
 ```{r, eval=TRUE, message=FALSE, warning=FALSE}
 library(leaflet)
 
-# create palette 
-paletteFun=colorFactor(palette = "YlOrRd", 
-                       domain = contrib_zipMap$amount_perCap_DEMO_catLabel)
+# theMAP subset: republicans 2012
+map_Rep2012=contrib_zipMap[contrib_zipMap$election_year==2012 &
+                           contrib_zipMap$party=='REPUBLICAN',]
 
-#labels
-labels <- sprintf(
-  "<strong>%s</strong>",
-  zipMap$ZCTA5CE10) %>% lapply(htmltools::HTML)
-# the base map
+# create palette to fill polygons
+paletteFun=colorFactor(palette = "YlOrRd", 
+                       domain = map_Rep2012$amount_perCap_catLabel)
+
+#popup labels when using your cursor
+popUp_labels <- sprintf("<strong>%s</strong>",
+                        map_Rep2012$ZCTA5CE10) %>% lapply(htmltools::HTML)
+
+# the base map: the WA boundaries (optional)
 base_map = leaflet() %>% 
             addTiles()%>%
-             addPolygons(data = zipMap,
-                         fillColor = "black",
+             addPolygons(data = wa_simple,
+                         fillColor = "white",
                          weight = 0,
-                         fillOpacity = 1,
-                         label = labels, # se which ones are missing
-                         labelOptions = labelOptions(style = list("font-weight" = "normal",
-                                                                  padding = "3px 8px"),
-                                                     textsize = "15px",
-                                                     direction = "auto"))
+                         fillOpacity = 1)
 
-# the making of the map
-final2012 = base_map %>%
-         addPolygons(data=contrib_zipMap[contrib_zipMap$election_year==2012,],
-                     weight = 0, #thickness of border
+# adding a layer (main map layer)
+Rep2012 = base_map %>%
+         addPolygons(data=map_Rep2012,
+                     stroke = F, # borders of polygon?
                      opacity =  1, # # the closer to 0 the more transparent
                      fillOpacity = 0.8, # color brigthness
-                     fillColor = ~paletteFun(amount_perCap_DEMO_catLabel))# coloring
+                     fillColor = ~paletteFun(amount_perCap_catLabel),# coloring
+                     label = popUp_labels, 
+                     labelOptions = labelOptions(
+                         style = list("font-weight" = "normal"),
+                         textsize = "15px",
+                         direction = "auto"))
                     
 
-final2012
+Rep2012
 ```
 
 You may need a legend:
 ```{r, eval=TRUE}
-final2012 %>% addLegend(data=contrib_zipMap,
+Rep2012 %>% addLegend(data=map_Rep2012,
                         position = "bottomright",
                         pal = paletteFun,
-                        values = ~amount_perCap_DEMO_catLabel,
-                        title = "DEM Contributions<br>(No contributions in black)",
+                        values = ~amount_perCap_catLabel,
+                        title = "Contributions<br>(No contributions in white)",
                         opacity = 1) 
 
 ```
 
-Let me plot by levels in groups:
+Let's create some kind of interactive legend:
+
+* Create subsets: here for democrats in 2012
+
+```{r}
+# filtering the zip map
+contribWA2012=contrib_zipMap[contrib_zipMap$election_year==2012,]
+contribWA2012_demo=contribWA2012[contribWA2012$party=='DEMOCRAT',]
+
+# these the subsets of interest
+# remember we have: 'theLabelsForLevels' 
+map10=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[1],]
+map100=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[2],]
+map1000=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[3],]
+map10000=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[4],]
+
+```
+
+
+* Create a layer for each submap, and use the **group** argument. Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels:
 
 ```{r, eval=TRUE}
-# creating sub maps
-contribWA2012=contrib_zipMap[contrib_zipMap$election_year==2012,]
-mapLOW=contribWA2012[contribWA2012$amount_perCap_DEMO_catLabel=='Low',]
-mapMEDIUM=contribWA2012[contribWA2012$amount_perCap_DEMO_catLabel=='Medium',]
-mapGOOD=contribWA2012[contribWA2012$amount_perCap_DEMO_catLabel=='High',]
+# from the brewer website, copy and paste:
+PuOr=c('#e66101','#fdb863','#b2abd2','#5e3c99')
 
-# plotting
+# one layer per group
 
 layer1= leaflet() %>% 
             addTiles() %>%
-        addPolygons(data=mapLOW,
-                    color='yellow',fillOpacity = 1,stroke = F,
-                    group = "Low") # LAYER as GROUP
+        addPolygons(data=map10,
+                    color=PuOr[1],
+                    fillOpacity = 1, # no transparency
+                    stroke = F,
+                    group = theLabelsForLevels[1]) # LAYER as GROUP
 
-layer1_2= layer1%>%addPolygons(data=mapMEDIUM,
-                               color="orange",fillOpacity = 1,stroke = F,
-                               group = "Medium")
+layer1_2= layer1%>%addPolygons(data=map100,
+                               color=PuOr[2],
+                               fillOpacity = 0.5, # transparency!!!
+                               stroke = F,
+                               group = theLabelsForLevels[2])
 
 
-layer1_2_3= layer1_2%>%addPolygons(data=mapGOOD,
-                                   color="red",fillOpacity = 1,stroke = F,
-                                   group = "High")
+layer1_2_3= layer1_2%>%addPolygons(data=map1000,
+                                   color=PuOr[3],fillOpacity = 0.5,stroke = F,
+                                   group = theLabelsForLevels[3])
 
-layer1_2_3
+layer1_2_3_4= layer1_2_3%>%addPolygons(data=map10000,
+                                   color=PuOr[4],fillOpacity = 1,stroke = F,
+                                   group = theLabelsForLevels[4])
+
+layer1_2_3_4
 ```
 
-Let's add a _button_ that helps rezooming:
+* Let's add a _button_ that helps rezooming:
 
 ```{r, eval=TRUE}
 textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
 
-final= layer1_2_3 %>%
+finalZoom= layer1_2_3_4 %>%
     addEasyButton(
         easyButton(icon="fa-home", # a symbol
                    title="Zoom to Level 1",
                    onClick=JS(textFun)))
 
-final
+finalZoom
 ```
 
-Here we add an interactive legend using the groups we previously defined:
+* Add an 'interactive legend' using the groups we previously defined:
 
 ```{r, eval=TRUE}
-final %>% addLayersControl(
-        overlayGroups = c('Good','Medium',"High"),
+
+finalZoomLayers=finalZoom %>% addLayersControl(
+        overlayGroups = theLabelsForLevels,
+        options = layersControlOptions(collapsed = FALSE))
+finalZoomLayers
+```
+
+## Facetting
+
+Facetting is not straightforward. If we use the previous map, we can build another one for democrats:
+
+```{r, eval=TRUE}
+# creating sub maps
+contribWA2016=contrib_zipMap[contrib_zipMap$election_year==2016,]
+contribWA2016_demo=contribWA2016[contribWA2016$party=='DEMOCRAT',]
+
+map10b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[1],]
+map100b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[2],]
+map1000b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[3],]
+map10000b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[4],]
+
+# plotting
+
+layer1b= leaflet() %>% 
+            addTiles() %>%
+        addPolygons(data=map10b,
+                    color=PuOr[1],fillOpacity = 1,stroke = F,
+                    group = theLabelsForLevels[1]) # LAYER as GROUP
+
+layer1_2b= layer1%>%addPolygons(data=map100b,
+                               color=PuOr[2],fillOpacity = 0.5,stroke = F,
+                               group = theLabelsForLevels[2])
+
+
+layer1_2_3b= layer1_2%>%addPolygons(data=map1000b,
+                                   color=PuOr[3],fillOpacity = 0.5,stroke = F,
+                                   group = theLabelsForLevels[3])
+
+layer1_2_3_4b= layer1_2_3%>%addPolygons(data=map10000b,
+                                   color=PuOr[4],fillOpacity = 1,stroke = F,
+                                   group = theLabelsForLevels[4])
+
+textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
+
+# Let's not request the HOME button..
+
+finalLayersb=layer1_2_3_4b %>% addLayersControl(
+        overlayGroups = theLabelsForLevels,
         options = layersControlOptions(collapsed = FALSE))
 ```
+
+Does this help? You need *leafsync* library:
+
+```{r}
+library(leafsync)
+finalFacet=sync(finalZoomLayers,finalLayersb,ncol = 2)
+finalFacet
+```
+Let's stop here!
 
 
 <!-- **Leaflet** is a good option too for spatial points: -->
 
-```{r, eval=TRUE,warning=FALSE}
+```{r, eval=FALSE,warning=FALSE, echo=FALSE}
 leaflet(contriWA_1216_RD_mapPoints) %>% 
     addTiles() %>% 
     addCircleMarkers(clusterOptions = markerClusterOptions())
@@ -588,7 +751,7 @@ leaflet(contriWA_1216_RD_mapPoints) %>%
 
 <!-- The previous map aggregated all the data. Let me split by party for 2016: -->
 
-```{r, eval=TRUE,warning=FALSE, eval=FALSE, echo=FALSE}
+```{r, warning=FALSE, eval=FALSE, echo=FALSE}
 # subsetting
 sub2016=contriWA_1216_RD_mapPoints[contriWA_1216_RD_mapPoints$election_year==2016,]
 
@@ -649,6 +812,7 @@ head(bostonZips)
 ```{r}
 plot(bostonZips[2])
 ```
+
 You have this variable:
 ```{r}
 summary(bostonCont$Amount)
@@ -659,7 +823,7 @@ summary(bostonCont$Amount)
 tapply(bostonCont$Amount,bostonCont$`Tender Type Description`,summary)
 ```
 
-Compare in a choropleth the contributions of two tender types (you choose which), by zip zode. The results can be interactive, but it is NOT compulsory.
+Compare the contributions of **two** tender types (you choose which), by zip zode. The results can be interactive, but it is _NOT_ compulsory.
 
 **NOTE**: You need to aggregate the data from the excel file, and then merged that aggregated data into the map. Then, you can plot the choropleths with the data as it is (countinuous) or discretize it before plotting. 
 
