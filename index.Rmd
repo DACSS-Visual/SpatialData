@@ -21,7 +21,6 @@ _____
 
 5. [Interactive maps](#part5) 
 
-6. [Homework #3](#part6) 
 
 
 _____
@@ -58,7 +57,7 @@ names(zipMap)
 
 Map files have at least two columns, one with a column representing some "id", and another totally compulsory, the column '**geom**', this column gives R the information needed to plot the geometry (line, point, polygon).  This file has come with more columns: one informing the _zip code_ of the geometry in that row (_ZCTA5CE10_); and apart from te other columns, we have the population for the years 2005 and 2015. 
 
-We can see the polygond like this using _ggplot2_:
+We can see the polygons like this using _ggplot2_:
 
 ```{r, warning=FALSE}
 
@@ -67,6 +66,19 @@ library(ggplot2)
 base=ggplot(data = zipMap) # map to use
 base + geom_sf(fill='black') # plot the geometry
 
+```
+
+As maps are a two dimensional representation of a three dimensional object, there is a particular projection depending on the location of the map on the earth. The current projection for WA state is:
+
+```{r}
+st_crs(zipMap)
+```
+
+When you get the EPSG as 4326, it is better to have the right projection to compute distances, because the current one (which is generallt the default when we download maps) is not useful for that. Then,
+
+```{r}
+# you can search or query the web/AI for the right CRS!!!
+zipMap_proj <- st_transform(zipMap, crs = 26910)
 ```
 
 _____
@@ -104,13 +116,15 @@ If you use population _density_ instead of _counts_, you derive a value that wil
 
 ```{r}
 #### we need library "units"
+# for this computation we use 'zipMap_proj'
 # st_make_valid(): make sure polygons are 'valid'
 # st_area(): compute the area
 # set_units(): give a unit to the area    
 # drop_units(): keep the value (number) and drop the rest
 
 library(units)
-zipMap$area_km2=drop_units(set_units(st_area(st_make_valid(zipMap)),'km2'))
+
+zipMap$area_km2=drop_units(set_units(st_area(st_make_valid(zipMap_proj)),'km2'))
 
 # now compute pop density
 zipMap$POP2005_density=zipMap$POP2005/zipMap$area_km2
@@ -216,6 +230,7 @@ table(contriWA_1216_RD$election_year,contriWA_1216_RD$party)
 
 Here we  drop those unused levels:
 ```{r}
+# this is a very important piece of code!!
 contriWA_1216_RD$party=droplevels(contriWA_1216_RD$party)
 ```
 
@@ -502,9 +517,7 @@ ________________
 The dataframe _contriWA_ has columns with coordinates (lon/lat), let's turn that data frame into a _spatial points data frame_, while making sure it has the same  coordinate system as our map:
 
 ```{r, eval=TRUE, warning=FALSE, message=FALSE}
-library(raster)
-
-mapCRS=crs(zipMap) # projection of our map of zipcodes
+mapCRS=st_crs(zipMap) # projection of our map of zipcodes
 
 contriWA_1216_RD_mapPoints=st_as_sf(contriWA_1216_RD,# data frame
                                     coords = c("Lon","Lat"), # form the data frame
@@ -526,8 +539,7 @@ class(contriWA_1216_RD_mapPoints)
 You can see the geographical details with this:
 
 ```{r, eval=TRUE, warning=FALSE}
-library(tmaptools)
-get_proj4(crs(contriWA_1216_RD_mapPoints))
+st_crs(contriWA_1216_RD_mapPoints)
 ```
 
 
