@@ -34,7 +34,7 @@ klippy::klippy(position = c('top', 'right'))
 
 # Simple map
 
-A map in our course can be a set of either polygons, lines, or points. In general, each represents a _**layer**_ of spatial information; and several layers form a complex map. Let me bring a map of polygons, where each polygon represents a zip code area:
+A map in our course can be a set of polygons, lines, or points. In general, each one represents a **layer** of spatial information, and several layers together make a complex map. Let's start by loading a map of polygons, where each polygon represents a zip code area:
 
 
 ```{r, eval=TRUE, warning=FALSE, message=FALSE}
@@ -42,43 +42,63 @@ rm(list = ls()) # start fresh
 
 library(sf) 
 link="https://github.com/DACSS-Visual/SpatialData/raw/main/maps/wazipMap.gpkg"
-zipMap=sf::read_sf(link, layer='zips')
+zipMap=read_sf(link, layer='zips')
 
-# see some rows
+# preview the first rows
 head(zipMap)
 ```
 
-As you in the link above, the map is in a file **wazipMap.gpkg**. The extension _.gpkg_ is a common one for maps. Other ver well known are **.shp** for _shapefiles_, and **.geojson** or simply **.json** for _geojson_ files. You use links to access _gpkg_ or _geojson_ files in R, but it might not work for _shp_ files. Shapefiles are in fact a collection of files instead of one, so it is more convenient to export _shp_ files into the other options if your plan demands reading from a website. All of these files are read with the same command:**read_sf()**. Notice that we used the argument **layer** when reading a _gpkg_, but it will not be needed in other cases.
+## File types
 
-The object **zipMap** has these variables:
+As you can see in the link above, the map is stored in a file called **wazipMap.gpkg**. The extension *.gpkg* is a common format for spatial data. Other well-known formats are **.shp** for *shapefiles* and **.geojson** (or simply **.json**) for *GeoJSON* files.
+
+You can use a URL to read *.gpkg* or *.geojson* files directly into R, but this may not work for *.shp* files. This is because a shapefile is actually a **collection of files** rather than a single file, making it less convenient to read from a URL. If you need to share or access a shapefile remotely, it is best to convert it to *.gpkg* or *.geojson* first.
+
+All of these formats are read using the same function: **`read_sf()`**. Note that the `layer` argument is needed when reading a *.gpkg* file (which can store multiple layers), but it is not required for *.geojson* or *.shp* files.
+
+The object **zipMap** contains the following variables:
 ```{r}
 names(zipMap)
 ```
 
-Map files have at least two columns, one with a column representing some "id", and another totally compulsory, the column '**geom**', this column gives R the information needed to plot the geometry (line, point, polygon).  This file has come with more columns: one informing the _zip code_ of the geometry in that row (_ZCTA5CE10_); and apart from te other columns, we have the population for the years 2005 and 2015. 
+Every spatial file must have at least two columns: one serving as an identifier (an "id"), and the mandatory **`geom`** column, which holds the geometry information (polygon, line, or point) that R uses for plotting. This file includes additional columns: the zip code of each area (*ZCTA5CE10*), and population figures for the years 2005 and 2015.
 
-We can see the polygons like this using _ggplot2_:
+We can visualize the polygons using *ggplot2*:
 
 ```{r, warning=FALSE}
 
 library(ggplot2)
 
-base=ggplot(data = zipMap) # map to use
-base + geom_sf(fill='black') # plot the geometry
+base=ggplot(data = zipMap) # define the map
+base + geom_sf(fill = 'grey80',# plot the geometry
+               color = 'black',
+               linewidth = 0.2)   
 
 ```
 
-As maps are a two dimensional representation of a three dimensional object, there is a particular projection depending on the location of the map on the earth. The current projection for WA state is:
+## Map projection
+
+Since a map is a two-dimensional representation of a three-dimensional object, every map uses a **projection** — a mathematical method for translating the curved surface of the Earth onto a flat plane. The projection used depends on the geographic location of the map. The current projection for our WA state map is:
+
+
 
 ```{r}
-st_crs(zipMap)
+st_crs(zipMap)$epsg
 ```
 
-When you get the EPSG as 4326, it is better to have the right projection to compute distances, because the current one (which is generallt the default when we download maps) is not useful for that. Then,
+When the EPSG code is **4326**, the map uses geographic coordinates (longitude and latitude in degrees), which is typically the default when downloading maps from the web. This projection is **not suitable for computing distances or areas** in meaningful units (e.g., meters). For that, we need to re-project the map to a suitable coordinate reference system (CRS). You can search the web or ask an AI tool for the right EPSG code for your study area:
+
+
+
 
 ```{r}
-# you can search or query the web/AI for the right CRS!!!
+# EPSG 26910 - appropriate for Washington State
 zipMap_proj <- st_transform(zipMap, crs = 26910)
+```
+
+The object **zipMap_proj** is actually a new map, but now rightly projected. You can confirm the change:
+```{r}
+st_crs(zipMap_proj)$epsg
 ```
 
 _____
@@ -94,73 +114,89 @@ ________________
 # Choropleths
 
 
-We call **choropleths** to a colored map representing the distribution of a variable. The colors assign some "ranking" to a polygon with respect to the rest. That is, **fill color is encoding information**. 
+A choropleth is a colored map that represents the spatial distribution of a variable. Colors assign a visual "ranking" to each polygon relative to the others — in other words, **fill color encodes information**.
 
-Coloring polygons is very easy, but that also may cause interpretation problems. For example let's color the polygons using the population information from 2005 using the [viridis colors](https://sjmgarnier.github.io/viridis/reference/scale_viridis.html): 
+Coloring polygons is straightforward, but it can also lead to interpretation problems. For example, let's color the polygons using population data from 2005 using the [viridis colors](https://sjmgarnier.github.io/viridis/reference/scale_viridis.html): 
 
 ```{r}
-base=ggplot(data = zipMap)
-base + geom_sf(aes(fill=POP2005), #variable for coloring geometry
-               color=NA) + # no borders
-    scale_fill_viridis_c(direction = -1) # color map
+base <- ggplot(data = zipMap)
+
+base + geom_sf(aes(fill = POP2005),   # variable used to color each polygon
+               color = NA) +           # no polygon borders
+  scale_fill_viridis_c(direction = -1) # apply viridis color scale
 ```
 
-The map above is plotting the counts as they are, in their raw form. Plotting counts, in general, prodcues a biased viz: the color intensity is correlating visually with the area size (you may review [this article](https://www.esri.com/about/newsroom/arcuser/understanding-statistical-data-for-mapping-purposes/) for further details). 
 
-Counts are not a property of the geometry as a whole, if you split the polygon, the count varies. Then, we should do some basic transformations:
+
+
+
+The map above plots raw counts — the values as they are, with no transformation. Plotting raw counts generally produces a **biased visualization**: color intensity ends up visually correlated with polygon area size (larger polygons tend to have larger counts simply because they are bigger). You can read [this article](https://www.esri.com/about/newsroom/arcuser/understanding-statistical-data-for-mapping-purposes/) for further details.
+
+Raw counts are not an intrinsic property of a polygon — if you split a polygon in two, the count changes. Therefore, we should apply a basic transformation before mapping.
+
+---
+
 
 ## Densities
 
 
-If you use population _density_ instead of _counts_, you derive a value that will deal better with the correlation of counts and area. Let's use the polygon to compute the area in _Km2_:
+Using population *density* instead of raw *counts* removes the visual bias caused by polygon size, since density accounts for the area of each polygon. Let's compute the area of each polygon in km²:
+
+
 
 ```{r}
-#### we need library "units"
-# for this computation we use 'zipMap_proj'
-# st_make_valid(): make sure polygons are 'valid'
-# st_area(): compute the area
-# set_units(): give a unit to the area    
-# drop_units(): keep the value (number) and drop the rest
-
 library(units)
 
-zipMap$area_km2=drop_units(set_units(st_area(st_make_valid(zipMap_proj)),'km2'))
+# We use 'zipMap_proj' (projected CRS) to compute area in meters, then convert to km²
+# st_make_valid(): ensure all polygons have valid geometry before computation
+# st_area():       compute the area of each polygon
+# set_units():     convert to km²
+# drop_units():    keep only the numeric value, dropping the unit label
 
-# now compute pop density
-zipMap$POP2005_density=zipMap$POP2005/zipMap$area_km2
+zipMap$area_km2 <- drop_units(
+  set_units(st_area(st_make_valid(zipMap_proj)), "km2")
+)
 
+# compute population density (people per km²)
+zipMap$POP2005_density <- zipMap$POP2005 / zipMap$area_km2
 ```
 
 
 Plotting the density:
 ```{r}
 
-base=ggplot(data = zipMap) # reload - you have a new variable
-choroPop=base + geom_sf(aes(fill=POP2005_density),color=NA)
+base <- ggplot(data = zipMap)   # rebuild base plot to include the new variable
 
-# right plot
+choroPop <- base + geom_sf(aes(fill = POP2005_density), color = NA)
+
 choroPop + scale_fill_viridis_c(direction = -1)
 
 ```
 
-## Rates instead of differences
 
-Let me represent _change_ using a **difference**:
+
+## Ratios Instead of Differences
+
+Let's now represent *change* in population between 2005 and 2015. A first instinct might be to use a **subtraction**:
+
+
 
 ```{r}
-# difference as substraction
-base + geom_sf(aes(fill=POP2015-POP2005),color=NA) + 
-     scale_fill_viridis_c(direction = -1, option = 'B') # B?
+# change represented as an absolute difference (subtraction)
+base + geom_sf(aes(fill = POP2015 - POP2005), color = NA) +
+  scale_fill_viridis_c(direction = -1, option = "B")   # "B" = "inferno" palette
 
 ```
 
-This is a better way:
+However, absolute differences are still affected by the original size of the counts — a gain of 500 people means something very different in a zip code of 1,000 vs. one of 100,000. A **ratio**  is a better choice because it expresses change *relative* to the starting value:
+
 
 ```{r}
 
-# difference as rate
-base + geom_sf(aes(fill=POP2015/POP2005),color=NA) + 
-       scale_fill_viridis_c(direction = -1, option = 'B') 
+# change represented as a ratio
+
+base + geom_sf(aes(fill = POP2015 / POP2005), color = NA) +
+  scale_fill_viridis_c(direction = -1, option = "B") 
 
 ```
 
@@ -799,53 +835,53 @@ final2
 
 _____
 
-<a id='part6'></a>
+<!-- <a id='part6'></a> -->
 
-## Deliverable III (option 1)
+<!-- ## Deliverable III (option 1) -->
 
-This link has data from this [website](https://www.ocpf.us/Home/Index), which, similarly to our previous data, campaign and political finances. This data has a subsample for Boston.
-```{r}
-linkBoston="https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/data/BostonContrib.xlsx"
+<!-- This link has data from this [website](https://www.ocpf.us/Home/Index), which, similarly to our previous data, campaign and political finances. This data has a subsample for Boston. -->
+<!-- ```{r} -->
+<!-- linkBoston="https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/data/BostonContrib.xlsx" -->
 
-bostonCont=rio::import(linkBoston)
+<!-- bostonCont=rio::import(linkBoston) -->
 
-#see it
-head(bostonCont)
-```
+<!-- #see it -->
+<!-- head(bostonCont) -->
+<!-- ``` -->
 
-And you have this map of zip codes:
+<!-- And you have this map of zip codes: -->
 
-```{r}
-library(sf)
-linkZips='https://raw.githubusercontent.com/DACSS-Visual/SpatialData/refs/heads/main/data/zip_codes.json'
-bostonZips=sf::read_sf(linkZips)
-#see it
-head(bostonZips)
-```
+<!-- ```{r} -->
+<!-- library(sf) -->
+<!-- linkZips='https://raw.githubusercontent.com/DACSS-Visual/SpatialData/refs/heads/main/data/zip_codes.json' -->
+<!-- bostonZips=sf::read_sf(linkZips) -->
+<!-- #see it -->
+<!-- head(bostonZips) -->
+<!-- ``` -->
 
-```{r}
-plot(bostonZips[2])
-```
+<!-- ```{r} -->
+<!-- plot(bostonZips[2]) -->
+<!-- ``` -->
 
-You have this variable:
-```{r}
-summary(bostonCont$Amount)
-```
-
-
-```{r}
-tapply(bostonCont$Amount,bostonCont$`Tender Type Description`,summary)
-```
-
-Compare the contributions of **two** tender types (you choose which), by zip zode. The results can be interactive, but it is _NOT_ compulsory.
-
-**NOTE**: You need to aggregate the data from the excel file, and then merged that aggregated data into the map. Then, you can plot the choropleths with the data as it is (countinuous) or discretize it before plotting. 
+<!-- You have this variable: -->
+<!-- ```{r} -->
+<!-- summary(bostonCont$Amount) -->
+<!-- ``` -->
 
 
+<!-- ```{r} -->
+<!-- tapply(bostonCont$Amount,bostonCont$`Tender Type Description`,summary) -->
+<!-- ``` -->
 
-_____
+<!-- Compare the contributions of **two** tender types (you choose which), by zip zode. The results can be interactive, but it is _NOT_ compulsory. -->
 
-[Go to table of contents.](#TOC)
+<!-- **NOTE**: You need to aggregate the data from the excel file, and then merged that aggregated data into the map. Then, you can plot the choropleths with the data as it is (countinuous) or discretize it before plotting.  -->
+
+
+
+<!-- _____ -->
+
+<!-- [Go to table of contents.](#TOC) -->
 
 
 
