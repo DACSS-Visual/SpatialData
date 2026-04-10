@@ -219,34 +219,39 @@ ________________
 
 ## The data
 
-The map itself rarely comes with interesting data. So most of the time we need to add data to the map (merge data into the map).
 
-Let's take a look at these data on contributions to Candidates and Political Committees in Washington State. The WA [portal](https://data.wa.gov/) for OpenData has this data on this [website](https://data.wa.gov/Politics/Contributions-to-Candidates-and-Political-Committe/kv7h-kjye).
+Maps rarely come with rich or interesting data on their own. Most of the time, we need to bring in an external dataset and merge it into the map.
+
+
+Let's work with data on contributions to candidates and political committees in Washington State. The WA [OpenData portal](https://data.wa.gov/) provides  this dataset on this [page](https://data.wa.gov/Politics/Contributions-to-Candidates-and-Political-Committe/kv7h-kjye).
 
 
 ```{r, eval=TRUE}
 linkData='https://github.com/DACSS-Visual/SpatialData/raw/main/data/contriWA.RData'
 load(url(linkData))
 
-# THIS IS NOT A MAP
+# NOTE: this is a regular data frame, NOT a map
 head(contriWA)
 ```
 
 
-Checking the data types:
+Let's check the data types:
 
 ```{r, eval=TRUE}
 str(contriWA,width = 60, strict.width = 'cut')
 ```
-A couple of details:
 
-1. The zip codes are numeric (_contributor_zip_), then:
+A few things to address before we can work with this data:
+
+**1. Zip codes are stored as numeric.** We need them as character strings to match the zip code IDs in the map:
+
 
 ```{r}
 contriWA$contributor_zip=as.character(contriWA$contributor_zip)
 ```
 
-2. The data is LONG by election year, so let's check the years available and the parties benefitted:
+
+**2. The data is in long format by election year.** Let's check which years and parties are available:
 
 ```{r}
 table(contriWA$election_year,contriWA$party)
@@ -258,9 +263,10 @@ Let's keep the Democrats and Republicans for 2012 and 2016:
 contriWA_1216_RD=contriWA[contriWA$election_year%in% c(2012,2016) & contriWA$party%in% c('DEMOCRAT','REPUBLICAN'),]
 ```
 
-3. There are categorical levels unused: Notice this:
+**3. Unused factor levels remain after subsetting.** Let's verify this and then drop them:
 
 ```{r}
+# unused levels are still present after subsetting
 table(contriWA_1216_RD$election_year,contriWA_1216_RD$party)
 ```
 
@@ -270,42 +276,49 @@ Here we  drop those unused levels:
 contriWA_1216_RD$party=droplevels(contriWA_1216_RD$party)
 ```
 
+## Aggregating Before Merging
 
-When you have a way to organize your data by a row that represents a place, location, or generally speking a **geometry**, you can plot your data on a map. However, in the current format, each row represents a _contribution_ but has no _geometry_ associated to that value. 
-However, you can merge (add) these data into the map we have. If our map is about zip codes, we must use create a dataframe by ZIP code from the data frame on _contributions_. This is an **aggregation** process:
+To merge this data into a map of zip codes, each row in our dataset must represent **one zip code** — not one individual contribution. We therefore need to **aggregate** the data by zip code, election year, and party:
+
 
 ```{r, eval=TRUE, message=FALSE, warning=FALSE}
 
 library(dplyr)
 
-# using columns 'amount'
-# 'counts':how many contributors
-# 'amountPerCap': mean contribution
+# aggregate by zip code, election year, and party
+# counts:        number of contributions
+# amountPerCap:  mean contribution amount
 
-# all grouped  by zip, year and party
-
-contribsWA_agg= contriWA_1216_RD %>%
-                    group_by(contributor_zip, election_year, party) %>%
-                        summarise_at(vars(amount),
-                                     list(counts=length,
-                                          amountPerCap=mean))
-# see results:
+contribsWA_agg <- contriWA_1216_RD %>%
+  group_by(contributor_zip, election_year, party) %>%
+  summarise(
+    counts       = length(amount),
+    amountPerCap = mean(amount),
+    .groups      = "drop"
+  )
+# then
 head(contribsWA_agg)
 ```
 
 
-Let me use the column _counts_ to compute the proportion of contributions going to a particular party. After that, we do not need _counts_ anymore:
+Now let's use `counts` to compute the **percentage** of contributions going to each party per zip code and year. Once computed, `counts` is no longer needed:
+
 
 ```{r}
-contribsWA_agg %>%
+contribsWA_agg <- contribsWA_agg %>%
   group_by(contributor_zip, election_year) %>%
+  mutate(percentage = counts / sum(counts) * 100) %>%
+  ungroup()
 
-  mutate(percentage = counts / sum(counts) * 100) ->contribsWA_agg
+# remove the raw counts column
+contribsWA_agg$counts <- NULL
 
-contribsWA_agg$counts=NULL
 ```
 
-Here, we may find that some zips in the contribution data may not be present in the map of zip codes:
+## Checking Coverage Before Merging
+
+Some zip codes in the contributions data may not exist in the map, and vice versa. Let's quantify this mismatch:
+
 
 ```{r}
 # not in zipMap 
@@ -315,92 +328,117 @@ length(setdiff(contribsWA_agg$contributor_zip,zipMap$ZCTA5CE10))
 # not in contribsWA_agg_W 
 length(setdiff(zipMap$ZCTA5CE10,contribsWA_agg$contributor_zip))
 ```
-We will only work with what is common in both.
+Only zip codes present in **both** datasets will be retained after merging — this is expected and acceptable.
 
 
-It is time to merge the data into the map:
+---
+
+## The Merge
 
 
 ```{r, eval=TRUE}
 
-# map to the left!
-# never: merge(contribsWA_agg,zipMap...)
+# Always put the MAP on the left side of the merge.
+# This ensures the result remains a spatial (sf) object.
+# Reversing the order — merge(contribsWA_agg, zipMap, ...) — would lose the geometry.
 
-contrib_zipMap=merge(zipMap,contribsWA_agg,
-                     by.x='ZCTA5CE10', # 
-                     by.y='contributor_zip')
-# you see
+contrib_zipMap <- merge(zipMap, contribsWA_agg,
+                        by.x = 'ZCTA5CE10',
+                        by.y = 'contributor_zip')
+
+# now you have
 head(contrib_zipMap)
 ```
 
-There is a new map: *contrib_zipMap*. 
+
+The result, **`contrib_zipMap`**, is a new spatial object that combines the zip code geometries with the aggregated contribution data, ready for choropleth mapping.
 
 
 Let's explore the contributions percapita:
 
 ```{r, eval=TRUE}
 
-base=ggplot() + theme_void() 
-base + geom_sf(data=contrib_zipMap,
-               aes(fill=amountPerCap)) + 
-       scale_fill_viridis_c(direction = -1,
-                            na.value = 'red') + # missing in red?
-       facet_grid(party~election_year) +
-       labs(fill='Contribution PerCap \n (red:no information)') 
+base <- ggplot() + theme_void()
+
+base + geom_sf(data = contrib_zipMap,
+               aes(fill = amountPerCap)) +
+  scale_fill_viridis_c(direction = -1,
+                       na.value = 'red') +       # missing values shown in red
+  facet_grid(party ~ election_year) +
+  labs(fill = 'Contribution Per Capita\n(red: no information)')
+
+
 ```
 
-Notice above that the long format does not have missing values (no _red_ areas), so a better way to see them would be use another layer (map):
+
+Notice that no zip codes appear in red — meaning there are no missing values in this dataset. However, the map gives no visual reference for areas that simply have no data (i.e., zip codes in WA that appear in the map but not in the contributions data). A better approach is to add a **background layer** showing the full state boundary, so that unmatched zip codes appear as white gaps:
+
 
 ```{r, message=FALSE}
-# another map, just boundaries.
-wa_simple=read_sf('https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/maps/WA_State_Boundary.geojson')
 
-#then
-base=ggplot(wa_simple) + geom_sf(fill='white')+theme_void() # the new map
-base + geom_sf(data=contrib_zipMap,
-               aes(fill=amountPerCap),color=NA) + # no border
-       scale_fill_viridis_c(direction = -1) +
-       facet_grid(party~election_year) +
-       labs(fill='Contribution PerCap \n (white:no information)') 
+# load a simple WA state boundary as a background layer
+wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/maps/WA_State_Boundary.geojson')
 
+# use wa_simple as the base layer (white fill = no data)
+base <- ggplot(wa_simple) +
+  geom_sf(fill = 'white') +
+  theme_void()
+
+base + geom_sf(data = contrib_zipMap,
+               aes(fill = amountPerCap),
+               color = NA) +               # no polygon borders
+  scale_fill_viridis_c(direction = -1) +
+  facet_grid(party ~ election_year) +
+  labs(fill = 'Contribution Per Capita\n(white: no information)')
 
 ```
 
 
-Let's explore the involvement of Republicans using the _proportion_ (while playing with the legend):
+Now let's explore **party involvement** using the percentage of contributions going to each party (with some legend customization):
+
 
 ```{r, eval=TRUE}
 
-base + geom_sf(data=contrib_zipMap,
-               aes(fill=percentage),color=NA) + 
-                scale_fill_viridis_c(direction = -1) +
-                    facet_grid(party~election_year) +
-                        labs(fill='Involvement (%) \n (white:no information)') +
-              theme(legend.title = element_text(size=8,
-                                                hjust = 0.5),#center
-                    legend.position = "bottom",
-                    legend.key.width = unit(1, "cm")) + # value to modify
-    guides(fill = guide_colourbar(title.position="top"))
+base + geom_sf(data = contrib_zipMap,
+               aes(fill = percentage),
+               color = NA) +
+  scale_fill_viridis_c(direction = -1) +
+  facet_grid(party ~ election_year) +
+  labs(fill = 'Involvement (%)\n(white: no information)') +
+  theme(legend.title    = element_text(size = 8, hjust = 0.5),
+        legend.position = "bottom",
+        legend.key.width = unit(1, "cm")) +
+  guides(fill = guide_colourbar(title.position = "top"))
 ```
 
-I still find it difficult to say something interesting in the title. Then, using **discretization** may help me more in this situation.
+With a continuous color scale it is still difficult to draw clear conclusions from the map. **Discretizing** the variable into categories can make patterns easier to read and communicate.
+
 
 # Discretizing
 
-Let me organize the contributions into four categories. Let's follow these steps to _discretize_ **amountPerCap**:
+Let's organize `amountPerCap` into four categories. We follow these steps:
+
 
 1. Explore the variable to find cutpoints. 
 
-First let's find out the distribution using _fivenum_ function (minimum, lower-hinge, median, upper-hinge, maximum)
+We use `fivenum` (minimum, lower hinge, median, upper hinge, maximum) to summarize the distribution by group:
+
 
 ```{r}
-do.call(data.frame,aggregate(data=contrib_zipMap,
-                             amountPerCap~election_year +party,fivenum))
+do.call(data.frame,
+        aggregate(data=contrib_zipMap,
+                  amountPerCap~election_year +party,
+                  fivenum))
 ```
 
-Base on this exploration, I am planing to cut the variable using the _powers of 10_:
+The distribution is heavily right-skewed, so **powers of 10** are a natural choice for cut points. Let's confirm visually:
+
 ```{r}
-ggplot(contrib_zipMap)+ aes(x=amountPerCap) + geom_density() + facet_wrap(~election_year +party,ncol = 1) + scale_x_log10()
+ggplot(contrib_zipMap) +
+  aes(x = amountPerCap) +
+  geom_density() +
+  facet_wrap(~ election_year + party, ncol = 1) +
+  scale_x_log10()
 ```
 
 
@@ -415,52 +453,47 @@ customCuts=c(0,10,100,1000,10000)
 
 Now create the discrete version:
 ```{r}
-contrib_zipMap$amount_perCap_cat=cut(contrib_zipMap$amountPerCap,
-                                          breaks=customCuts,include.lowest = F,
-                                          dig.lab = 5)
+customLabels <- c("Up to $10", "$10–$100", "$100–$1,000", "Over $1,000")
+
+# create the discrete variable directly with labels inside cut()
+contrib_zipMap$amount_perCap_cat <- cut(contrib_zipMap$amountPerCap,
+                                        breaks        = customCuts,
+                                        labels        = customLabels,
+                                        include.lowest = FALSE)
 #
 #
 # see the distribution
-table(contrib_zipMap$amount_perCap_cat,contrib_zipMap$election_year,contrib_zipMap$party)
+table(contrib_zipMap$amount_perCap_cat,
+      contrib_zipMap$election_year,
+      contrib_zipMap$party)
 ```
 
-As you see above, there is at least one value in each. The outlying values are few, and the most common one are clearly identified.
 
-Let me also prepare some _labels_ for levels (which could be used in the legend):
+Each category has at least one observation. The extreme categories (below $10 and above $1,000) are rare, while the middle ranges are the most common.
 
-```{r, eval=TRUE}
-# labels
-theLabelsForLevels=c("upTo_10",">10_to100", ">100_to1000", 'MoreThan_1000')
 
-#the new var:
-contrib_zipMap$amount_perCap_catLabel=contrib_zipMap$amount_perCap_cat
+3. Plot with a sequential palette
 
-# as they are factor, we can change level labels
-levels(contrib_zipMap$amount_perCap_catLabel)=theLabelsForLevels
+Choose a sequential palette from [here](https://ggplot2.tidyverse.org/reference/scale_brewer.html):
 
-# see some
-head(contrib_zipMap$amount_perCap_catLabel,10)
-
-```
-
-Let's plot (choose  sequential palette from [here](https://ggplot2.tidyverse.org/reference/scale_brewer.html)). Here we use the intervals:
 
 ```{r}
 
-base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_cat),color=NA) + 
-               labs(fill="US$ PerCapita \nAreas with NO Info in white",
-                    title='Contributions to Republicans and Democrats: Not much difference',
-                    subtitle='WA State zip boundaries, contribution in 2012 & 2016')+
-                    scale_fill_brewer(palette = "YlOrRd") +
-                        facet_grid(party~election_year) 
+base + geom_sf(data = contrib_zipMap,
+               aes(fill = amount_perCap_cat),
+               color = NA) +
+  scale_fill_brewer(palette = "YlOrRd") +
+  facet_grid(party ~ election_year) +
+  labs(fill     = "US$ Per Capita\n(white: no information)",
+       title    = "Contributions to Republicans and Democrats: Not much difference",
+       subtitle = "WA State zip codes — contributions in 2012 & 2016") 
 
 ```
 
 Here, the difference is only in the labels of the legend and the legend placement:
 ```{r}
 base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_catLabel),color=NA) + 
+               aes(fill=amount_perCap_cat),color=NA) + 
                labs(fill="US$ PerCapita \nAreas with NO Info in white",
                     title='Contributions to Republicans and Democrats: Not much difference',
                     subtitle='WA State zip boundaries, contributions in 2012 & 2016')+
@@ -471,36 +504,37 @@ base + geom_sf(data=contrib_zipMap,
 
 How to highlight the least common?
 
-* You need to customize the color:_scale_fill_manual()_
+Use `scale_fill_manual()` to assign custom colors and draw attention to the rarest groups:
 
 ```{r}
 # your colors;
 customCols=c("black", "grey80", "grey90","red")
 
-base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_catLabel),color=NA) + 
-               labs(fill="US$ PerCapita \nAreas with NO Info in white",
-                    title='The least common contributions',
-                    subtitle='WA State counties, contribution in 2012 & 2016')+
-                    scale_fill_manual(values = customCols) +
-                        facet_grid(party~election_year) +
-    theme(legend.position = "left")
+base + geom_sf(data = contrib_zipMap,
+               aes(fill = amount_perCap_cat),
+               color = NA) +
+  scale_fill_manual(values = customCols) +
+  facet_grid(party ~ election_year) +
+  labs(fill     = "US$ Per Capita\n(white: no information)",
+       title    = "The least common contribution amounts",
+       subtitle = "WA State zip codes — contributions in 2012 & 2016") +
+  theme(legend.position = "left")
 ```
 
-What about annotating? Let's use *geom_sf_text*:
+What about annotating? Let's use *geom_sf_text* to add zip code labels only for the two extreme categories to avoid visual clutter:
 
-Notice that you need the the zipcodes of interest, so let's subset:
 ```{r}
-ZipOk=c("upTo_10",'MoreThan_1000')
-contrib_zipMap_SUB=contrib_zipMap[contrib_zipMap$amount_perCap_catLabel%in%ZipOk,]
+ZipOk=c("Up to $10",  "Over $1,000")
+contrib_zipMap_SUB=contrib_zipMap[contrib_zipMap$amount_perCap_cat%in%ZipOk,]
 ```
+
 
 
 ```{r, warning=FALSE}
 #
 
 base + geom_sf(data=contrib_zipMap,
-               aes(fill=amount_perCap_catLabel),color=NA) + 
+               aes(fill=amount_perCap_cat),color=NA) + 
                labs(fill="US$ PerCapita \nAreas with NO Info in white",
                     title='Top contributions increasing for democrats in 2016',
                     subtitle='WA State counties, contribution in 2012 & 2016',
@@ -511,7 +545,7 @@ base + geom_sf(data=contrib_zipMap,
     # annotating
     geom_sf_text(data=contrib_zipMap_SUB,
                  aes(label=ZCTA5CE10,
-                     color=amount_perCap_catLabel),
+                     color=amount_perCap_cat),
                  check_overlap = T,
                  size=1.5,
                  nudge_y = 0.15) +
@@ -519,26 +553,11 @@ base + geom_sf(data=contrib_zipMap,
             guides(color=F)
 ```
 
-As you see, mapping may look easy, but most of the time it takes a while to find something to communicate. Let's stop this case here.
-
-<!-- To avoid the previous problem with _gridExtra_: -->
-
-```{r, echo=FALSE,eval=FALSE}
-map2012=base + geom_sf(data=contribWA[contribWA$election_year==2012,],
-               aes(fill=amount_perCap_DEMOCRAT_cat)) + 
-                    scale_fill_brewer(palette = "YlOrRd") 
-
-map2016=base + geom_sf(data=contribWA[contribWA$election_year==2016,],
-               aes(fill=amount_perCap_DEMOCRAT_cat)) + 
-                    scale_fill_brewer(palette = "YlOrRd") 
-
-gridExtra::grid.arrange(map2012,map2016,ncol=1)
-
-```
+As this section shows, making a map is technically straightforward — but finding a clear, honest story to tell with it takes time and iteration.
 
 
 
-_____
+
 
 
 [Go to table of contents.](#TOC)
@@ -550,48 +569,121 @@ ________________
 
 # Plotting coordinates
 
-The dataframe _contriWA_ has columns with coordinates (lon/lat), let's turn that data frame into a _spatial points data frame_, while making sure it has the same  coordinate system as our map:
+The dataframe contriWA contains columns with geographic coordinates (longitude and latitude). Let's convert it into a **spatial points dataframe**, making sure it uses the same coordinate reference system (CRS) as our zip code map:
 
 ```{r, eval=TRUE, warning=FALSE, message=FALSE}
-mapCRS=st_crs(zipMap) # projection of our map of zipcodes
+mapCRS <- st_crs(zipMap)   # extract the CRS from our zip code map
 
-contriWA_1216_RD_mapPoints=st_as_sf(contriWA_1216_RD,# data frame
-                                    coords = c("Lon","Lat"), # form the data frame
-                                    remove = TRUE, # remove lon/lat
-                                    crs=mapCRS) # projection for spatial object
+contriWA_1216_RD_points <- st_as_sf(contriWA_1216_RD,         # source data frame
+                                     coords = c("Lon", "Lat"), # columns with coordinates
+                                     remove = TRUE,            # drop the original Lon/Lat columns
+                                     crs    = mapCRS)          # assign the same CRS as the map
 ```
 
-Our new spatial _points_ dataframe looks the same:
+The new spatial object has the same columns as before — except the `Lon` and `Lat` columns have been replaced by a single `geometry` column:
+
 ```{r, eval=TRUE}
-names(contriWA_1216_RD_mapPoints)
+names(contriWA_1216_RD_points)
 ```
 
-But it is not a simple data frame:
+Unlike a regular dataframe, this object is now an `sf` (simple features) object:
 
 ```{r, eval=TRUE}
-class(contriWA_1216_RD_mapPoints)
+class(contriWA_1216_RD_points)
 ```
 
 You can see the geographical details with this:
 
 ```{r, eval=TRUE, warning=FALSE}
-st_crs(contriWA_1216_RD_mapPoints)
+st_crs(contriWA_1216_RD_points)
 ```
 
 
-Now, plot the new map of points on top of our WA state map:
+Now let's plot the points on top of the WA state zip code map:
 
 ```{r}
-base=ggplot(data = zipMap) + theme_light() + geom_sf(fill='grey90', color='white') 
+base <- ggplot(data = zipMap) +
+  theme_light() +
+  geom_sf(fill = 'grey90', color = 'white')   # zip code polygons as background
 
-contributors=base + 
-                geom_sf(data=contriWA_1216_RD_mapPoints, size=0.2,alpha=0.5) + 
-                    facet_grid(party~election_year)
+contributors <- base +
+  geom_sf(data  = contriWA_1216_RD_points,
+          size  = 0.2,
+          alpha = 0.5) +
+  facet_grid(party ~ election_year) +
+  labs(title    = "Individual contributions by party and year",
+       subtitle = "WA State zip codes — 2012 & 2016",
+       caption  = "Source: WA State Open Data (https://data.wa.gov/)")
 
 contributors
 ```
 
-Again, you created a map, but it is difficult to say a clear message. Notice the vocabulary for this last case would use _East_, _West_, _North_, _South_, etc. But no salient patter is detected (i.e. you can not say 'nobody likes Y in the West'). A better choice would have been select a particular county.
+Individual contributions are plotted as points across WA State. The western side of the state is almost entirely black — so many points stack on top of each other that it is impossible to judge the true local concentration. We can say that both parties draw contributions predominantly from western WA, but beyond that, the overplotting prevents any deeper reading. We cannot tell whether there is one dominant cluster or several, nor can we compare the intensity between parties or years. We need a better tool.
+
+
+
+```{r}
+# extract X (lon) and Y (lat) from the geometry column into plain columns
+contriWA_1216_RD_points <- cbind(
+  contriWA_1216_RD_points,
+  st_coordinates(contriWA_1216_RD_points)   # adds columns named X and Y
+)
+
+```
+
+```{r}
+base <- ggplot(data = zipMap) +
+  theme_void() +
+  geom_sf(fill = 'grey95', color = 'white')   # background zip code layer
+
+base +
+  stat_density_2d(
+    data  = contriWA_1216_RD_points,
+    aes(x = X, y = Y,
+        fill  = after_stat(level)),
+    geom  = "polygon",
+    alpha = 0.7,
+    bins  = 10,
+    h     = c(0.8, 0.8)    # ← bandwidth in degrees (lon/lat); increase to smooth more
+  ) +
+  scale_fill_viridis_c(option    = "B",
+                       direction = -1,
+                       name      = "Density") +
+  facet_grid(party ~ election_year) +
+  labs(title    = "Where are contributions concentrated? Mostly in the west — for both parties",
+       subtitle = "Kernel density of individual contributions — WA State, 2012 & 2016",
+       caption  = "Source: WA State Open Data (https://data.wa.gov/)")
+```
+By replacing raw points with a kernel density estimate, we smooth the overplotting into a surface that shows where contributions are truly concentrated. Now the picture is clear: there is one dominant hot spot for both parties — the Seattle/Puget Sound area. Democrats show a tighter, more intense core; Republicans show a slightly broader spread. However, because the density scale is absolute (shared across all panels), the dominant western cluster completely overwhelms any other signal. If there are secondary clusters elsewhere in the state — say, in eastern WA — they are invisible here. We need to look more carefully.
+
+```{r, warning=FALSE, message=FALSE}
+base +
+  stat_density_2d(
+    data     = contriWA_1216_RD_points,
+    aes(x    = X, y = Y,
+        fill = after_stat(ndensity)),
+    geom     = "raster",
+    contour  = FALSE,
+    alpha    = 0.7,
+    h        = c(0.8, 0.8)
+  ) +
+  # overlay the state boundary ON TOP of the raster to restore geographic context
+  geom_sf(data = wa_simple, fill = NA, color = "grey40", linewidth = 0.4) +
+  scale_fill_viridis_c(option    = "B",
+                       direction = -1,
+                       name      = "Relative\nDensity") +
+  facet_grid(party ~ election_year) +
+  labs(title    = "Contributions are overwhelmingly concentrated in western WA — for both parties",
+       subtitle = "Normalized kernel density — WA State, 2012 & 2016",
+       caption  = "Source: WA State Open Data (https://data.wa.gov/)")
+```
+
+
+By normalizing the density within each panel (scaling each from 0 to 1 independently), we allow secondary patterns to emerge. Now we can see that Republicans have a visible secondary cluster in eastern WA (~118°W, likely the Spokane area) that was completely hidden in Map 2. Democrats, by contrast, remain almost exclusively concentrated in the west. This west/east partisan divide is subtle — eastern WA contributions are far fewer in absolute terms — but it is real and would have gone unnoticed without normalization.
+
+
+> The progression from Map 1 to Map 3 illustrates a core principle of spatial visualization: each design choice reveals something and hides something else. Raw points show you the data honestly but are overwhelmed by overplotting. Absolute density surfaces reveal dominant patterns but suppress secondary ones. Normalized density surfaces uncover hidden structure but sacrifice cross-group comparability. Used together, the three maps converge on a single conclusion: political contributions in WA State are a western, urban phenomenon for both parties — but Republicans have a foothold in eastern WA that Democrats largely do not.
+
 _____
 
 
