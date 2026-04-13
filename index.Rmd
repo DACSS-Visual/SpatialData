@@ -601,133 +601,22 @@ Keep in mind that When visualizing geographic point data with `stat_density_2d()
 &gt; **Raw density** preserves absolute magnitude but can hide spatial structure in low-intensity regions.  
 &gt; **Transformed scales** reveal hidden patterns but distort the intuitive interpretation of "how much."
 
-PAY AT three plots of Washington State political contributions illustrate this trade-off perfectly.
 
-## Strategy 1: Raw `level` (Linear Scale)
-
-fill = after_stat(level)
+### KDE Strategy 1: Raw `level` (Linear Scale)
 
 
-### What It Does
-Maps color directly to the kernel density estimate. Areas with twice the point density get twice the color intensity (on a continuous scale).
 
-### The Advantage
-**Preserves absolute magnitude differences.** If Seattle has 50 times the contribution density of Spokane, it looks 50 times more intense. This is statistically honest and defensible.
-
-### The Disadvantage (Visible in Your Plot)
-**The "One Hotspot and Nothing Else" Problem.** In your first plot, Democrat contributions create such extreme density in the Seattle metro that the color scale stretches to accommodate values >10. Republican contributions, with densities perhaps 1/50th of that, fade to near-invisibility. The map becomes:
-
-- Democrats: "Seattle and minor satellites"
-- Republicans: "Barely visible yellow smudges"
-
-You cannot compare spatial patterns across groups because one group dominates the visual channel.
-
-### When to Teach This Strategy
-Use raw `level` when:
-- The research question emphasizes **absolute dominance** ("Seattle contributions swamp the rest of the state")
-- Data is relatively **evenly distributed** (e.g., suburban Ohio, not urban-rural Washington)
-- The audience needs to compare **peak intensities** across time or categories ("Was 2016's maximum higher than 2012's?")
-
-### Teaching Moment
-Show students your first plot and ask: "Where do Republicans contribute?" They'll likely guess randomly—proof that the scale has failed to reveal spatial structure.
-
----
-
-## Strategy 2: `log(level)` (Logarithmic Scale)
-fill = after_stat(log(level))
+```{r,eval=FALSE}
+stat_density_2d(aes(...,
+                    fill = after_stat(level)),
+                geom  = "polygon")
+```
 
 
-### What It Does
-Applies the natural logarithm to density values before mapping to color. Multiplicative differences become additive: a 10× density gap becomes a constant color step, whether from 0.1→1 or 1→10.
 
-### The Advantage (Visible in Your Second Plot)
-**Reveals hidden spatial structure.** Suddenly Republican contributions show clear clustering—likely suburban rings, secondary cities, or exurban zones that were invisible before. For Democrats, secondary markets (Spokane, Tacoma, Vancouver) emerge from Seattle's shadow.
-
-The log scale **compresses the dynamic range**, making low-intensity patterns visible without eliminating high-intensity hotspots.
-
-### The Disadvantage
-**Non-intuitive interpretation.** Viewers must understand that color differences represent *ratios*, not *absolute differences*. A move from yellow to dark blue might mean +2.5 log units, which translates to a 12× density multiplier—not an intuitive "12 times more."
-
-Also: **Zero-density areas become undefined** (`log(0) = -Inf`). `stat_density_2d()` handles this by setting a floor, but true absence becomes hard to distinguish from near-zero density.
-
-### When to Teach This Strategy
-Use `log(level)` when:
-- Data spans **orders of magnitude** (urban vs. rural, your exact scenario)
-- The research question involves **relative concentration** ("Where are Republicans concentrated *given their lower overall volume*?")
-- Doing **exploratory analysis** to detect unexpected outliers
-- Comparing groups with **different base rates** (Democrats vs. Republicans, disease rates across demographics)
-
-### Teaching Moment
-Have students compare your Plot 1 and Plot 2 side-by-side. Ask: "What geographic insight about Republicans do you gain only in the log scale?" This demonstrates that **scale choice is an analytical decision**, not just aesthetic.
-
----
-
-## Strategy 3: `as.ordered(level)` with Bins (Discrete Scale)
-fill = after_stat(as.ordered(level)), bins = 5
-
-
-### What It Does
-Converts continuous density into **ordered categories** (factors), forcing exactly 5 distinct color bands regardless of the underlying distribution shape.
-
-### The Advantage
-**Interpretability and actionability.** Discrete categories map naturally to decisions:
-- "Tier 1 (dark purple): Direct voter contact"
-- "Tier 2 (blue): Targeted digital ads"
-- "Tier 3-5: Ignore for resource allocation"
-
-Categories survive **poor printing, grayscale conversion, and colorblindness** better than continuous gradients. They also **standardize comparison** across facets—"high" means the same color in every panel.
-
-### The Disadvantage (Visible in Your Third Plot)
-**Arbitrary boundaries.** Your bins (3.2, 6.4, 9.6, 12.8) appear equally spaced, but density is not. Most Republican contributions fall into the lowest bin (purple dots), while Democrats occupy the upper tiers. The scale **replicates the visibility problem** of raw `level`, just with discrete colors.
-
-**Loss of granularity.** Within-bin variation disappears. If two Republican clusters have densities of 3.3 and 6.3, they look identical (both blue), even though one is nearly double the other.
-
-### When to Teach This Strategy
-Use `as.ordered(level)` when:
-- Creating **presentation graphics** for non-technical decision-makers
-- Defining **policy thresholds** ("high-poverty zones" for intervention)
-- Needing **consistent legends** across multiple maps or time periods
-- Working with **colorblind-safe palettes** (ColorBrewer works best with discrete scales)
-
-### Critical Teaching Point
-**Bin specification matters enormously.** Your third plot uses default equal-interval breaks, which fails for skewed data. Teach students to:
-1. Explore with `log(level)` first to find natural breakpoints
-2. Use quantile-based breaks (`quantile(level, probs = seq(0, 1, 0.2))`) for skewed distributions
-3. Consider **separate breaks per group** if comparing Democrats and Republicans (so "high" means "high for Republicans," not "high overall")
-
----
-
-## Comparative Summary Table
-
-| Criterion | Raw `level` | `log(level)` | `as.ordered(level)` |
-|-----------|-------------|--------------|---------------------|
-| **Preserves absolute magnitude** | Yes | No (preserves ratios) | Within bins only |
-| **Reveals low-intensity structure** | No | Yes | Depends on breaks |
-| **Intuitive interpretation** | "More color = more points" | "More color = exponentially more" | "Dark purple = Tier 1" |
-| **Cross-group comparison** | Dominated by high-value group | Normalizes scale differences | Requires careful break selection |
-| **Publication-ready** | Requires justification | Standard for skewed data | Best for presentations |
-| **Handles zero values** | Naturally | Requires floor adjustment | Naturally |
-
----
-
-## Pedagogical Exercise
-
-Have students complete this workflow:
-
-1. **Explore** with `log(level)` to discover spatial structure they didn't know existed
-2. **Diagnose** why raw `level` failed (calculate: `max(Dem_density) / max(Rep_density)`)
-3. **Optimize** discrete breaks using quantiles of the log-transformed data
-4. **Defend** their final scale choice based on the research question, not visual preference
-
-**Key lesson:** The "best" scale depends on whether your question is about **absolute volume**, **relative concentration**, or **actionable zones**—not which plot looks prettiest.
-
----
-
-## Strategy 1: Raw `level` (Linear Scale)
-
+This strategy maps color directly to the kernel density estimate. Areas with twice the point density get twice the color intensity (on a continuous scale).
 
 ```{r}
-
 base +
   stat_density_2d(
     data  = contriWA_1216_RD_points,
@@ -735,20 +624,83 @@ base +
         fill  = after_stat(level)),
     geom  = "polygon"
   ) +
-  facet_grid(party ~ election_year) 
+  facet_grid(party ~ election_year) + labs(title = "kde 1")
 ```
+
+Notice from above:
+
+> The Advantage: **Preserves absolute magnitude differences.** If Seattle has 50 times the contribution density of Spokane, it looks 50 times more intense. This is statistically honest and defensible.
+
+> The Disadvantage (Visible in Your Plot): **The "One Hotspot and Nothing Else" Problem.** In your first plot, Democrat contributions create such extreme density in the Seattle metro that the color scale stretches to accommodate values >10. Republican contributions, with densities perhaps 1/50th of that, fade to near-invisibility. The map becomes:
+- Democrats: "Seattle and minor satellites"
+- Republicans: "Barely visible yellow smudges"
+
+**Is it a good strategy?**
+
+We may use raw `level` when:
+- The research question emphasizes **absolute dominance** ("Seattle contributions swamp the rest of the state")
+- Data is relatively **evenly distributed** (e.g., suburban Ohio, not urban-rural Washington)
+- The audience needs to compare **peak intensities** across time or categories ("Was 2016's maximum higher than 2012's?")
+
+
+---
+
+### KDE Strategy 2: `log10(level)` (Logarithmic Scale)
+
+
+
+```{r,eval=FALSE}
+stat_density_2d(aes(...,
+                    fill = after_stat(log10(level))),
+                geom  = "polygon")
+```
+
+
+This strategy applies a **base-10 logarithm** to density values before mapping to color. Multiplicative differences become additive: a 10× density gap becomes a constant color step, whether from 0.1→1 or 1→10.
 
 
 ```{r}
 base +
-  stat_density_2d(
-    data  = contriWA_1216_RD_points,
-    aes(x = Lon, y = Lat,
-        fill  = after_stat(log(level))),
-    geom  = "polygon"
-  ) +
-  facet_grid(party ~ election_year) 
+  stat_density_2d(data  = contriWA_1216_RD_points,
+                  aes(x = Lon, y = Lat,
+                      fill  = after_stat(log10(level))),
+                  geom  = "polygon") +
+      facet_grid(party ~ election_year) 
 ```
+Notice from above:
+
+> The Advantage: **Reveals hidden spatial structure.** Suddenly Republican contributions show clear clustering—likely suburban rings, secondary cities, or exurban zones that were invisible before. For Democrats, secondary markets (Spokane, Tacoma, Vancouver) emerge from Seattle's shadow.
+
+The log scale **compresses the dynamic range**, making low-intensity patterns visible without eliminating high-intensity hotspots.
+
+> The Disadvantage: **Non-intuitive interpretation.** Viewers must understand that color differences represent *ratios*, not *absolute differences*. A move from yellow to dark blue might mean +1.0 log unit, which translates to a **10× density multiplier**—not always intuitive.
+
+Also: **Zero-density areas become undefined**  (log10(0) = -Inf). stat_density_2d() handles this by setting a floor, but true absence becomes hard to distinguish from near-zero density.
+
+**Is it a good strategy?**
+
+Use `log10(level)` when:
+- Data spans **orders of magnitude** (urban vs. rural, our exact scenario)
+- The research question involves **relative concentration** ("Where are Republicans concentrated *given their lower overall volume*?")
+- Doing **exploratory analysis** to detect unexpected outliers
+- Comparing groups with **different base rates** (Democrats vs. Republicans, disease rates across demographics)
+
+
+
+---
+### KDE Strategy 3:  `as.ordered(level)` with Bins (Discrete Scale)
+
+
+```{r,eval=FALSE}
+stat_density_2d(aes(...,
+                    fill = after_stat(as.ordered(level)), 
+                    bins = 5,
+                geom  = "polygon")
+```
+
+In this strategy we convert continuous density into **ordered categories** (factors), forcing exactly 5 distinct color bands regardless of the underlying distribution shape.
+
+
 
 ```{r}
 base +
@@ -756,12 +708,47 @@ base +
     data = contriWA_1216_RD_points,
     aes(x = Lon, y = Lat, fill = after_stat(as.ordered(level))), # Binned
     geom = "polygon",
-    bins = 5, # Force 5 distinct levels of "heat"
-    #h = c(0.5, 0.5) # <--- Increase this to 'smear' the ink a bit more
+    bins = 5 # Force 5 distinct levels of "heat"
   ) +
   facet_grid(party ~ election_year)
 ```
 
+In this last plot, 
+> The Advantage: **Interpretability and actionability.** Discrete categories map naturally to decisions:
+- "Tier 1 (dark purple): Direct voter contact"
+- "Tier 2 (blue): Targeted digital ads"
+- "Tier 3-5: Ignore for resource allocation"
+Categories allow explicit labeling of thresholds ('Tier 1 = 3+ contributions/km²'), making legends self-explanatory. But the palette choice matters—always use colorblind-safe discrete palettes (ColorBrewer 'Blues', 'YlOrRd') rather than default rainbow (as above).
+
+> The Disadvantage: **Arbitrary boundaries.** Your bins (3.2, 6.4, 9.6, 12.8) appear equally spaced, but density is not. Most Republican contributions fall into the lowest bin (purple dots), while Democrats occupy the upper tiers. The scale **replicates the visibility problem** of raw `level`, just with discrete colors. Binning doesn't fix skewed distributions—it hides the skew behind _arbitrary_ cutpoints, an arbitrariness  that introduces sensitivity analysis: try bins = 3 vs. bins = 7, or manual breaks at substantive thresholds (e.g., median household income in each zip).
+
+> **Loss of granularity.** Within-bin variation disappears. If two Republican clusters have densities of 3.3 and 6.3, they look identical (both blue), even though one is nearly double the other.
+
+**Is it a good strategy?**
+
+Use `as.ordered(level)` when:
+- Creating **presentation graphics** for non-technical decision-makers
+- Defining **policy thresholds** ("high-poverty zones" for intervention)
+- Needing **consistent legends** across multiple maps or time periods
+- Working with **colorblind-safe palettes** (ColorBrewer works best with discrete scales)
+
+
+---
+
+## Comparative Summary Table
+
+| Criterion | Raw `level` | `log10(level)` | `as.ordered(level)` |
+|-----------|-------------|--------------|---------------------|
+| **Preserves absolute magnitude** | Yes | No (preserves ratios) | Within bins only |
+| **Reveals low-intensity structure** | No | Yes | Depends on breaks |
+| **Intuitive interpretation** | "More color = more points" | "Equal color steps = 10× density jumps" | "Dark purple = Tier 1 (low density, high priority)" |
+| **Handles zero/near-zero** | Naturally (no color) | Requires floor (`log10(0)` undefined) | Binned into lowest category |
+| **Sensitivity to outliers** | High — extremes dominate | Low — compresses range | High if data-dependent breaks |
+| **Cross-group comparison** | Dominated by high-value group | Normalizes scale differences | Requires careful break selection |
+| **Publication-ready** | Requires justification | Standard for skewed data | Best for presentations |
+
+
+---
 
 Try adding a viridis palette?
 
