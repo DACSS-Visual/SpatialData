@@ -314,6 +314,7 @@ contribsWA_agg=do.call(data.frame, agg_data)
 names(contribsWA_agg)[c(4,5)]=c('count_contributors','sum_contributions')
 ## using library(dplyr):
 
+library(dplyr) # not really using it now.
 # contribsWA_agg <- contriWA_1216_RD %>%
 #   group_by(contributor_zip, election_year, party) %>%
 #   summarise(
@@ -395,7 +396,7 @@ base + geom_sf(data = contrib_zipMap,
 
 ```
 
-Again, the sum is not a good choice for mapping, then try the average (share) of contributions
+Again, remember the _sum_ is not a good choice for mapping, then try the percent (share) of contributions:
 
 ```{r}
 base + geom_sf(data = contrib_zipMap,
@@ -406,7 +407,7 @@ base + geom_sf(data = contrib_zipMap,
 ```
 
 
-Notice the map gives no visual reference for areas that were lost during the merge. A better approach is to add a **background layer** showing the full state boundary, so that unmatched zip codes appear as white gaps:
+Notice the map gives no visual reference for areas that were lost during the merge. A better approach is to add a **background layer** showing the full state boundary, so that unmatched zip codes appear as _grey_ gaps:
 
 
 ```{r, message=FALSE}
@@ -559,23 +560,25 @@ We can confirm its geographic properties with:
 st_crs(contriWA_1216_RD_points)
 ```
 
+## Simplest way with _geom_sf()_
 
-Now let's plot the points on top of the WA state zip code map:
+Let's plot the points on top of the WA state zip code map using its map nature:
 
 ```{r}
-base <- ggplot(wa_simple) +
-  geom_sf(fill = 'white') +
-  theme_void()
+# borders
+base <- ggplot(wa_simple) + geom_sf(fill = 'white') +
+        theme_void()
 
 contributors <- base +
-  geom_sf(data  = contriWA_1216_RD_points, alpha=0.1) +
-  facet_grid(party ~ election_year) + labs(title ="Location of contributors")
+                geom_sf(data  = contriWA_1216_RD_points) +
+                facet_grid(party ~ election_year) + 
+                labs(title ="Location of contributors")
 
 # see
 contributors
 ```
 
-Individual contributions are plotted as points across WA State. Arguably, the western side of the state has the most contributors — but given that  points could stack on top of each other it is impossible to judge the true local concentration. Sometimes changing the `alpha` (transparency) improves this kind of viz (overplotting):
+Individual contributions are plotted as points across WA State. Arguably, the western side of the state has the most contributors — but given that  points could stack on top of each other it is impossible to judge the true local concentration. Sometimes changing the `alpha` (transparency) improves this kind of viz weakness (overplotting):
 
 ```{r}
 base +
@@ -587,23 +590,13 @@ base +
 
 We can say from the last map above that both parties draw contributions predominantly from western WA, but beyond that, the overplotting prevents any deeper reading. We cannot tell whether there is one dominant cluster or several, nor can we compare the intensity between parties or years. 
 
-A **kernel density estimate (KDE)** replaces the raw points with a smooth surface that shows *where contribution shares are most concentrated*. Before computing it, remember we need to use the original Longitud  `X` and Latitude `Y` coordinate columns in `stat_density_2d()`, which cannot recover those values from an `sf` geometry:
+## The KDE approach
 
+A **kernel density estimate (KDE)** replaces the raw points with a smooth surface that shows *where contribution shares are most concentrated*. 
 
-```{r}
-# extract X (lon) and Y (lat) from the geometry column into plain columns
-contriWA_1216_RD_points <- cbind(
-  contriWA_1216_RD_points,
-  st_coordinates(contriWA_1216_RD_points)   # adds columns named X and Y
-)
-# you get:
+Here we will use ggplot's `stat_density_2d()`and will not use `geom_sf()` for the geom (only for the base map).  Before computing `stat_density_2d()`, remember this function uses the original Longitud  `X` and Latitude `Y` coordinate columns, not the `sf` geometry.
 
-head(contriWA_1216_RD_points)
-```
-
-Now, time to plot.
-
-When visualizing geographic point data with `stat_density_2d()`, you face a fundamental tension:
+Keep in mind that When visualizing geographic point data with `stat_density_2d()`, you face a fundamental tension:
 
 &gt; **Raw density** preserves absolute magnitude but can hide spatial structure in low-intensity regions.  
 &gt; **Transformed scales** reveal hidden patterns but distort the intuitive interpretation of "how much."
