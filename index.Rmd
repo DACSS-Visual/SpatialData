@@ -935,76 +935,95 @@ _____
 
 # Interactive Maps
 
-Interactive Maps
-Preparing Data for Web Mapping
-Interactive maps (using libraries like leaflet, tmap, or mapview) require optimized data to load quickly in browsers. Raw spatial data is often too large, containing unnecessary detail and columns.
-The Challenge
-Original polygon data: ~50MB
-Too heavy for smooth web interaction
-Contains columns we don't need for visualization
-The Solution: A Processing Pipeline
-We use sf + dplyr to create a lightweight version:
+## Preparing Data for Web Mapping
 
-| Step         | Function                        | Purpose                                         |
-| ------------ | ------------------------------- | ----------------------------------------------- |
-| 1. Project   | `st_transform(crs = 26910)`     | Convert to meters for meaningful simplification |
-| 2. Validate  | `st_make_valid()`               | Fix any broken geometries                       |
-| 3. Simplify  | `st_simplify(dTolerance = 500)` | Reduce vertices by ~94% (500m tolerance)        |
-| 4. Subset    | `select(...)`                   | Keep only essential columns                     |
-| 5. Reproject | `st_transform(crs = 4326)`      | Back to WGS84 for web mapping                   |
+Interactive maps created with libraries such as _leaflet_, _tmap_, or _mapview_ usually require lighter spatial data than static maps. Raw spatial objects are often too large because they contain unnecessary columns and a very high number of points defining each polygon.
 
+For instance, in the next notebook we will use _contrib_zipMap_, which is approximately this size:
+
+```{r}
+format(object.size(contrib_zipMap), units = "auto")
+```
+
+**The Challenge**:
+
+* The original object may be too heavy for interactive functions, making them slow or unstable.
+* Polygons often contain more points than are needed for web visualization.
+* The object may also include columns that are irrelevant for the map.
+
+**The Solution:** 
+We preprocess the spatial object to reduce its size before using it in interactive maps.
+
+| Step         | Function                        | Purpose                                                 |
+| ------------ | ------------------------------- | ------------------------------------------------------- |
+| 1. Subset    | `contrib_zipMap[, keepSome]`    | Keep only the columns needed for mapping                |
+| 2. Project   | `st_transform(crs = 26910)`     | Convert to a metric CRS so simplification uses meters   |
+| 3. Validate  | `st_make_valid()`               | Prevent problems if any geometries are invalid          |
+| 4. Simplify  | `st_simplify(dTolerance = 500)` | Reduce the number of points used to define each polygon |
+| 5. Reproject | `st_transform(crs = 4326)`      | Return to geographic coordinates for web mapping        |
+
+
+
+> The key function is `st_simplify()`, which removes points from polygon boundaries. This reduces geometric detail, but usually not in a way that is noticeable to the eye at the scale of an interactive web map. The result is a spatial object that is much more manageable in memory and faster to render.
 
 
 ```{r}
-library(sf)
-library(dplyr)
+# subsetting
+keepSome <- c("ZCTA5CE10", "election_year", "party", "share_contributions_cat")
 
-contrib_zipMap_light <- contrib_zipMap %>%
-  st_transform(crs = 26910) %>%
-  st_make_valid() %>%
-  st_simplify(dTolerance = 500, preserveTopology = TRUE) %>%
-  select(ZCTA5CE10, election_year, party, share_contributions_cat) %>%
+# 1. subset
+contrib_zipMap_light <- contrib_zipMap[, keepSome]
+
+# 2. project to a metric CRS
+contrib_zipMap_light <- contrib_zipMap_light %>%
+  st_transform(crs = 26910)
+
+# 3. validate geometries
+contrib_zipMap_light <- contrib_zipMap_light %>%
+  st_make_valid()
+
+# 4. simplify geometry
+contrib_zipMap_light <- contrib_zipMap_light %>%
+  st_simplify(dTolerance = 500, preserveTopology = TRUE)
+
+# 5. return to geographic coordinates for web mapping
+contrib_zipMap_light <- contrib_zipMap_light %>%
   st_transform(crs = 4326)
 
-# Save for interactive mapping lesson
-st_write(contrib_zipMap_light, "contrib_polygons_light.gpkg", 
-         delete_dsn = TRUE, quiet = TRUE)
-
-# Also saving point data for comparison
-st_write(contriWA_1216_RD_points, "contrib_points.gpkg")
 ```
 
-Saving some maps to explore interactive maps:
+The result will be saved as a *GeoPackage* file. Notice that, if a file with the same name already exists in the working directory, I delete it first; otherwise, the writing process may fail.
 
 ```{r}
-# st_write from "sf" library
+outfile1 <- "contrib_polygons_light.gpkg"
 
-library(dplyr)
-library(sf)
-library(dplyr)
+if (file.exists(outfile1)) {
+  file.remove(outfile1)
+}
 
-# Pipeline: transform → validate → simplify → subset → reproject
-contrib_zipMap_light <- contrib_zipMap %>%
-  # Project to meters for meaningful simplification
-  st_transform(crs = 26910) %>%
-  # Fix invalid geometries
-  st_make_valid() %>%
-  # Simplify (500m tolerance)
-  st_simplify(dTolerance = 500, preserveTopology = TRUE) %>%
-  # Keep only mapping essentials
-  select(ZCTA5CE10, election_year, party, share_contributions_cat) %>%
-  # Back to WGS84 for web mapping
-  st_transform(crs = 4326)
-
-
-# Write optimized file
-st_write(contrib_zipMap_light, "contrib_polygons_light.gpkg", 
-         delete_dsn = TRUE, quiet = TRUE)
-
-st_write(obj = contriWA_1216_RD_points,
-         dsn = "contrib_points.gpkg")
-
+st_write(
+  contrib_zipMap_light,
+  outfile1,
+  quiet = TRUE
+)
 ```
+
+
+**Also saving point data prevously created:**
+
+
+```{r}
+outfile2 <- "contrib_points.gpkg"
+
+if (file.exists(outfile2)) {
+  file.remove(outfile2)
+}
+st_write(contriWA_1216_RD_points,
+  outfile2,
+  quiet = TRUE
+)
+```
+
 
 
 [Go to table of contents.](#TOC)
