@@ -12,7 +12,7 @@ _____
 rm(list = ls()) # start fresh
 
 library(sf)
-contrib_zipMap=st_read("contrib_polygons.gpkg")
+contrib_zipMap=st_read("contrib_polygons_light.gpkg")
 wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/maps/WA_State_Boundary.geojson')
 ```
 
@@ -155,57 +155,57 @@ finalZoomLayers=finalZoom %>% addLayersControl(
 finalZoomLayers
 ```
 
-<!-- ## Facetting -->
+## Facetting
 
-<!-- Facetting is not straightforward. If we use the previous map, we can build another one for democrats: -->
+Facetting is not straightforward. If we use the previous map, we can build another one for democrats:
 
-<!-- ```{r, eval=TRUE} -->
-<!-- # creating sub maps -->
-<!-- contribWA2016=contrib_zipMap[contrib_zipMap$election_year==2016,] -->
-<!-- contribWA2016_demo=contribWA2016[contribWA2016$party=='DEMOCRAT',] -->
+```{r, eval=TRUE}
+# creating sub maps
+contribWA2016=contrib_zipMap[contrib_zipMap$election_year==2016,]
+contribWA2016_demo=contribWA2016[contribWA2016$party=='DEMOCRAT',]
 
-<!-- map10b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[1],] -->
-<!-- map100b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[2],] -->
-<!-- map1000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[3],] -->
-<!-- map10000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[4],] -->
+map10b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[1],]
+map100b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[2],]
+map1000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[3],]
+map10000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[4],]
 
-<!-- # plotting -->
+# plotting
 
-<!-- layer1b= leaflet() %>% -->
-<!--             addTiles() %>% -->
-<!--         addPolygons(data=map10b, -->
-<!--                     color=PuOr[1],fillOpacity = 1,stroke = F, -->
-<!--                     group = theLabelsForLevels[1]) # LAYER as GROUP -->
+layer1b= leaflet() %>%
+            addTiles() %>%
+        addPolygons(data=map10b,
+                    color=PuOr[1],fillOpacity = 1,stroke = F,
+                    group = theLabelsForLevels[1]) # LAYER as GROUP
 
-<!-- layer1_2b= layer1%>%addPolygons(data=map100b, -->
-<!--                                color=PuOr[2],fillOpacity = 0.5,stroke = F, -->
-<!--                                group = theLabelsForLevels[2]) -->
+layer1_2b= layer1%>%addPolygons(data=map100b,
+                               color=PuOr[2],fillOpacity = 0.5,stroke = F,
+                               group = theLabelsForLevels[2])
 
 
-<!-- layer1_2_3b= layer1_2%>%addPolygons(data=map1000b, -->
-<!--                                    color=PuOr[3],fillOpacity = 0.5,stroke = F, -->
-<!--                                    group = theLabelsForLevels[3]) -->
+layer1_2_3b= layer1_2%>%addPolygons(data=map1000b,
+                                   color=PuOr[3],fillOpacity = 0.5,stroke = F,
+                                   group = theLabelsForLevels[3])
 
-<!-- layer1_2_3_4b= layer1_2_3%>%addPolygons(data=map10000b, -->
-<!--                                    color=PuOr[4],fillOpacity = 1,stroke = F, -->
-<!--                                    group = theLabelsForLevels[4]) -->
+layer1_2_3_4b= layer1_2_3%>%addPolygons(data=map10000b,
+                                   color=PuOr[4],fillOpacity = 1,stroke = F,
+                                   group = theLabelsForLevels[4])
 
-<!-- textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}" -->
+textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
 
-<!-- # Let's not request the HOME button.. -->
+# Let's not request the HOME button..
 
-<!-- finalLayersb=layer1_2_3_4b %>% addLayersControl( -->
-<!--         overlayGroups = theLabelsForLevels, -->
-<!--         options = layersControlOptions(collapsed = FALSE)) -->
-<!-- ``` -->
+finalLayersb=layer1_2_3_4b %>% addLayersControl(
+        overlayGroups = theLabelsForLevels,
+        options = layersControlOptions(collapsed = FALSE))
+```
 
-<!-- Does this help? You need *leafsync* library: -->
+Does this help? You need *leafsync* library:
 
-<!-- ```{r} -->
-<!-- library(leafsync) -->
-<!-- finalFacet=sync(finalZoomLayers,finalLayersb,ncol = 2) -->
-<!-- finalFacet -->
-<!-- ``` -->
+```{r}
+library(leafsync)
+finalFacet=sync(finalZoomLayers,finalLayersb,ncol = 2)
+finalFacet
+```
 
 
 

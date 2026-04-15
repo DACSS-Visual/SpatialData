@@ -935,13 +935,71 @@ _____
 
 # Interactive Maps
 
+Interactive Maps
+Preparing Data for Web Mapping
+Interactive maps (using libraries like leaflet, tmap, or mapview) require optimized data to load quickly in browsers. Raw spatial data is often too large, containing unnecessary detail and columns.
+The Challenge
+Original polygon data: ~50MB
+Too heavy for smooth web interaction
+Contains columns we don't need for visualization
+The Solution: A Processing Pipeline
+We use sf + dplyr to create a lightweight version:
+
+| Step         | Function                        | Purpose                                         |
+| ------------ | ------------------------------- | ----------------------------------------------- |
+| 1. Project   | `st_transform(crs = 26910)`     | Convert to meters for meaningful simplification |
+| 2. Validate  | `st_make_valid()`               | Fix any broken geometries                       |
+| 3. Simplify  | `st_simplify(dTolerance = 500)` | Reduce vertices by ~94% (500m tolerance)        |
+| 4. Subset    | `select(...)`                   | Keep only essential columns                     |
+| 5. Reproject | `st_transform(crs = 4326)`      | Back to WGS84 for web mapping                   |
+
+
+
+```{r}
+library(sf)
+library(dplyr)
+
+contrib_zipMap_light <- contrib_zipMap %>%
+  st_transform(crs = 26910) %>%
+  st_make_valid() %>%
+  st_simplify(dTolerance = 500, preserveTopology = TRUE) %>%
+  select(ZCTA5CE10, election_year, party, share_contributions_cat) %>%
+  st_transform(crs = 4326)
+
+# Save for interactive mapping lesson
+st_write(contrib_zipMap_light, "contrib_polygons_light.gpkg", 
+         delete_dsn = TRUE, quiet = TRUE)
+
+# Also saving point data for comparison
+st_write(contriWA_1216_RD_points, "contrib_points.gpkg")
+```
+
 Saving some maps to explore interactive maps:
 
 ```{r}
-# st_write from "sf" library;
+# st_write from "sf" library
 
-st_write(obj = contrib_zipMap,
-         dsn = "contrib_polygons.gpkg")
+library(dplyr)
+library(sf)
+library(dplyr)
+
+# Pipeline: transform → validate → simplify → subset → reproject
+contrib_zipMap_light <- contrib_zipMap %>%
+  # Project to meters for meaningful simplification
+  st_transform(crs = 26910) %>%
+  # Fix invalid geometries
+  st_make_valid() %>%
+  # Simplify (500m tolerance)
+  st_simplify(dTolerance = 500, preserveTopology = TRUE) %>%
+  # Keep only mapping essentials
+  select(ZCTA5CE10, election_year, party, share_contributions_cat) %>%
+  # Back to WGS84 for web mapping
+  st_transform(crs = 4326)
+
+
+# Write optimized file
+st_write(contrib_zipMap_light, "contrib_polygons_light.gpkg", 
+         delete_dsn = TRUE, quiet = TRUE)
 
 st_write(obj = contriWA_1216_RD_points,
          dsn = "contrib_points.gpkg")
