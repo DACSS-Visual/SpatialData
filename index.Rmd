@@ -19,7 +19,6 @@ _____
 
 4. [Creating spatial points](#part4) 
 
-5. [Interactive maps](#part5) 
 
 
 
@@ -661,15 +660,18 @@ base +
 ```
 
 
-> Interpretation
-Color maps directly to estimated density.
-Higher density = stronger fill.
+> **Interpretation**
 
-> Strength
-This is the most statistically direct representation.
+> * Color maps directly to estimated density.
+> * Higher density = stronger fill.
 
-> Weakness
-Extremely dense regions dominate the scale. Seattle may overshadow weaker clusters.
+> **Strength**
+
+> * This is the most statistically direct representation.
+
+> **Weakness**
+
+> * Extremely dense regions dominate the scale. Seattle may overshadow weaker clusters.
 
 **Use Raw Density When**
 
@@ -691,7 +693,7 @@ stat_density_2d(aes(...,
 ```
 
 
-This strategy applies a **base-10 logarithm** to density values before mapping to color. Multiplicative differences become additive: a 10× density gap becomes a constant color step, whether from 0.1→1 or 1→10.
+This strategy applies a **base-10 logarithm** to density values before mapping to color. 
 
 
 ```{r}
@@ -702,15 +704,21 @@ base +
                   geom  = "polygon") +
       facet_grid(party ~ election_year) + labs(title='log KDE')
 ```
-> Interpretation
-The logarithm compresses the range of densities.
-A 10× increase becomes one equal visual step.
 
->Strength
-Hidden clusters become visible. Secondary cities and suburban concentrations emerge more clearly.
+> **Interpretation**
 
-> Weakness
-Interpretation is less intuitive. Color reflects relative ratios rather than raw magnitude.
+
+> * The logarithm compresses the range of densities.
+
+> * A 10× increase becomes one equal visual step.
+
+> **Strength**
+
+> * Hidden clusters become visible. Secondary cities and suburban concentrations emerge more clearly.
+
+> **Weakness**
+
+> * Interpretation is less intuitive. Color reflects relative ratios rather than raw magnitude.
 
 **Use Log Density When**
 
@@ -731,7 +739,7 @@ stat_density_2d(aes(...,
                 geom  = "polygon")
 ```
 
-In this strategy we convert continuous density into **ordered categories** (factors), forcing exactly 5 distinct color bands regardless of the underlying distribution shape.
+In this strategy we convert continuous density into **ordered categories** (factors), forcing, in this case, exactly 5 distinct color bands regardless of the underlying distribution shape.
 
 
 
@@ -746,14 +754,17 @@ base +
   facet_grid(party ~ election_year)
 ```
 
->Interpretation
-Continuous density is converted into ordered categories such as low, medium, and high.
+> **Interpretation**
 
->Strength
-Easy to read and useful for presentations.
+> * Continuous density is converted into ordered categories such as low, medium, and high.
 
->Weakness
-Boundaries are arbitrary. Fine differences disappear.
+> **Strength**
+
+> * Easy to read and useful for presentations.
+
+> **Weakness**
+
+> * Boundaries are arbitrary. Fine differences disappear.
 
 **Use Binned Density When**
 
@@ -800,17 +811,22 @@ base +
   facet_grid(party ~ election_year) 
 ```
 
-> What is `ndensity`?
-Within each panel:
-- minimum approximately 0
-- maximum = 1
-Each facet receives its own internal scale.
+> **What is `ndensity`?**
 
-> Strength
-Shows where each group is concentrated relative to itself. Hidden eastern Washington clusters may emerge.
+> Within each panel:
 
-> Weakness
-You cannot compare magnitude across panels.
+> - minimum approximately 0
+> - maximum = 1
+
+> * Each facet receives its own internal scale.
+
+> **Strength**
+
+> * Shows where each group is concentrated relative to itself. Hidden eastern Washington clusters may emerge.
+
+> **Weakness**
+
+> * You cannot compare magnitude across panels.
 
 This answers:
 
@@ -917,294 +933,24 @@ That conclusion becomes visible only by comparing multiple visualization strateg
 
 _____
 
+# Interactive Maps
+
+Saving some maps to explore interactive maps:
+
+```{r}
+# st_write from "sf" library;
+
+st_write(obj = contrib_zipMap,
+         dsn = "contrib_polygons.gpkg")
+
+st_write(obj = contriWA_1216_RD_points,
+         dsn = "contrib_points.gpkg")
+
+```
+
 
 [Go to table of contents.](#TOC)
 
-________________
-
-
-<!-- <a id='part5'></a> -->
-
-
-<!-- # Interactive maps -->
-
-<!-- Interactive maps are useful when you need zooming in. I will use **leaflet** library: -->
-
-<!-- ```{r, eval=TRUE, message=FALSE, warning=FALSE} -->
-<!-- library(leaflet) -->
-
-<!-- # theMAP subset: republicans 2012 -->
-<!-- map_Rep2012=contrib_zipMap[contrib_zipMap$election_year==2012 & -->
-<!--                            contrib_zipMap$party=='REPUBLICAN',] -->
-
-<!-- # create palette to fill polygons -->
-<!-- paletteFun=colorFactor(palette = "YlOrRd",  -->
-<!--                        domain = map_Rep2012$amount_perCap_catLabel) -->
-
-<!-- #popup labels when using your cursor -->
-<!-- popUp_labels <- sprintf("<strong>%s</strong>", -->
-<!--                         map_Rep2012$ZCTA5CE10) %>% lapply(htmltools::HTML) -->
-
-<!-- # the base map: the WA boundaries (optional) -->
-<!-- base_map = leaflet() %>%  -->
-<!--             addTiles()%>% -->
-<!--              addPolygons(data = wa_simple, -->
-<!--                          fillColor = "white", -->
-<!--                          weight = 0, -->
-<!--                          fillOpacity = 1) -->
-
-<!-- # adding a layer (main map layer) -->
-<!-- Rep2012 = base_map %>% -->
-<!--          addPolygons(data=map_Rep2012, -->
-<!--                      stroke = F, # borders of polygon? -->
-<!--                      opacity =  1, # # the closer to 0 the more transparent -->
-<!--                      fillOpacity = 0.8, # color brigthness -->
-<!--                      fillColor = ~paletteFun(amount_perCap_catLabel),# coloring -->
-<!--                      label = popUp_labels,  -->
-<!--                      labelOptions = labelOptions( -->
-<!--                          style = list("font-weight" = "normal"), -->
-<!--                          textsize = "15px", -->
-<!--                          direction = "auto")) -->
-
-
-<!-- Rep2012 -->
-<!-- ``` -->
-
-<!-- You may need a legend: -->
-<!-- ```{r, eval=TRUE} -->
-<!-- Rep2012 %>% addLegend(data=map_Rep2012, -->
-<!--                         position = "bottomright", -->
-<!--                         pal = paletteFun, -->
-<!--                         values = ~amount_perCap_catLabel, -->
-<!--                         title = "Contributions<br>(No contributions in white)", -->
-<!--                         opacity = 1)  -->
-
-<!-- ``` -->
-
-<!-- Let's create some kind of interactive legend: -->
-
-<!-- * Create subsets: here for democrats in 2012 -->
-
-<!-- ```{r} -->
-<!-- # filtering the zip map -->
-<!-- contribWA2012=contrib_zipMap[contrib_zipMap$election_year==2012,] -->
-<!-- contribWA2012_demo=contribWA2012[contribWA2012$party=='DEMOCRAT',] -->
-
-<!-- # these the subsets of interest -->
-<!-- # remember we have: 'theLabelsForLevels'  -->
-<!-- map10=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[1],] -->
-<!-- map100=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[2],] -->
-<!-- map1000=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[3],] -->
-<!-- map10000=contribWA2012_demo[contribWA2012_demo$amount_perCap_catLabel==theLabelsForLevels[4],] -->
-
-<!-- ``` -->
-
-
-<!-- * Create a layer for each submap, and use the **group** argument. Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels: -->
-
-<!-- ```{r, eval=TRUE} -->
-<!-- # from the brewer website, copy and paste: -->
-<!-- PuOr=c('#e66101','#fdb863','#b2abd2','#5e3c99') -->
-
-<!-- # one layer per group -->
-
-<!-- layer1= leaflet() %>%  -->
-<!--             addTiles() %>% -->
-<!--         addPolygons(data=map10, -->
-<!--                     color=PuOr[1], -->
-<!--                     fillOpacity = 1, # no transparency -->
-<!--                     stroke = F, -->
-<!--                     group = theLabelsForLevels[1]) # LAYER as GROUP -->
-
-<!-- layer1_2= layer1%>%addPolygons(data=map100, -->
-<!--                                color=PuOr[2], -->
-<!--                                fillOpacity = 0.5, # transparency!!! -->
-<!--                                stroke = F, -->
-<!--                                group = theLabelsForLevels[2]) -->
-
-
-<!-- layer1_2_3= layer1_2%>%addPolygons(data=map1000, -->
-<!--                                    color=PuOr[3],fillOpacity = 0.5,stroke = F, -->
-<!--                                    group = theLabelsForLevels[3]) -->
-
-<!-- layer1_2_3_4= layer1_2_3%>%addPolygons(data=map10000, -->
-<!--                                    color=PuOr[4],fillOpacity = 1,stroke = F, -->
-<!--                                    group = theLabelsForLevels[4]) -->
-
-<!-- layer1_2_3_4 -->
-<!-- ``` -->
-
-<!-- * Let's add a _button_ that helps rezooming: -->
-
-<!-- ```{r, eval=TRUE} -->
-<!-- textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}" -->
-
-<!-- finalZoom= layer1_2_3_4 %>% -->
-<!--     addEasyButton( -->
-<!--         easyButton(icon="fa-home", # a symbol -->
-<!--                    title="Zoom to Level 1", -->
-<!--                    onClick=JS(textFun))) -->
-
-<!-- finalZoom -->
-<!-- ``` -->
-
-<!-- * Add an 'interactive legend' using the groups we previously defined: -->
-
-<!-- ```{r, eval=TRUE} -->
-
-<!-- finalZoomLayers=finalZoom %>% addLayersControl( -->
-<!--         overlayGroups = theLabelsForLevels, -->
-<!--         options = layersControlOptions(collapsed = FALSE)) -->
-<!-- finalZoomLayers -->
-<!-- ``` -->
-
-<!-- ## Facetting -->
-
-<!-- Facetting is not straightforward. If we use the previous map, we can build another one for democrats: -->
-
-<!-- ```{r, eval=TRUE} -->
-<!-- # creating sub maps -->
-<!-- contribWA2016=contrib_zipMap[contrib_zipMap$election_year==2016,] -->
-<!-- contribWA2016_demo=contribWA2016[contribWA2016$party=='DEMOCRAT',] -->
-
-<!-- map10b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[1],] -->
-<!-- map100b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[2],] -->
-<!-- map1000b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[3],] -->
-<!-- map10000b=contribWA2016_demo[contribWA2016_demo$amount_perCap_catLabel==theLabelsForLevels[4],] -->
-
-<!-- # plotting -->
-
-<!-- layer1b= leaflet() %>%  -->
-<!--             addTiles() %>% -->
-<!--         addPolygons(data=map10b, -->
-<!--                     color=PuOr[1],fillOpacity = 1,stroke = F, -->
-<!--                     group = theLabelsForLevels[1]) # LAYER as GROUP -->
-
-<!-- layer1_2b= layer1%>%addPolygons(data=map100b, -->
-<!--                                color=PuOr[2],fillOpacity = 0.5,stroke = F, -->
-<!--                                group = theLabelsForLevels[2]) -->
-
-
-<!-- layer1_2_3b= layer1_2%>%addPolygons(data=map1000b, -->
-<!--                                    color=PuOr[3],fillOpacity = 0.5,stroke = F, -->
-<!--                                    group = theLabelsForLevels[3]) -->
-
-<!-- layer1_2_3_4b= layer1_2_3%>%addPolygons(data=map10000b, -->
-<!--                                    color=PuOr[4],fillOpacity = 1,stroke = F, -->
-<!--                                    group = theLabelsForLevels[4]) -->
-
-<!-- textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}" -->
-
-<!-- # Let's not request the HOME button.. -->
-
-<!-- finalLayersb=layer1_2_3_4b %>% addLayersControl( -->
-<!--         overlayGroups = theLabelsForLevels, -->
-<!--         options = layersControlOptions(collapsed = FALSE)) -->
-<!-- ``` -->
-
-<!-- Does this help? You need *leafsync* library: -->
-
-<!-- ```{r} -->
-<!-- library(leafsync) -->
-<!-- finalFacet=sync(finalZoomLayers,finalLayersb,ncol = 2) -->
-<!-- finalFacet -->
-<!-- ``` -->
-<!-- Let's stop here! -->
-
-
-<!-- <!-- **Leaflet** is a good option too for spatial points: --> -->
-
-<!-- ```{r, eval=FALSE,warning=FALSE, echo=FALSE} -->
-<!-- leaflet(contriWA_1216_RD_mapPoints) %>%  -->
-<!--     addTiles() %>%  -->
-<!--     addCircleMarkers(clusterOptions = markerClusterOptions()) -->
-<!-- ``` -->
-
-<!-- <!-- The previous map aggregated all the data. Let me split by party for 2016: --> -->
-
-<!-- ```{r, warning=FALSE, eval=FALSE, echo=FALSE} -->
-<!-- # subsetting -->
-<!-- sub2016=contriWA_1216_RD_mapPoints[contriWA_1216_RD_mapPoints$election_year==2016,] -->
-
-<!-- leafDEMO2016=leaflet(sub2016[sub2016$party=='DEMOCRAT',]) %>%  -->
-<!--     addTiles() %>%  -->
-<!--     addCircleMarkers(clusterOptions = markerClusterOptions()) -->
-<!-- ``` -->
-
-<!-- ```{r, eval=FALSE, echo=FALSE,warning=FALSE} -->
-<!-- # for rezoom -->
-<!-- textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}" -->
-
-
-<!-- leafREPU2016=leaflet(sub2016[sub2016$party=='REPUBLICAN',]) %>%  -->
-<!--     addTiles() %>%  -->
-<!--     addCircleMarkers(clusterOptions = markerClusterOptions())%>% -->
-<!--     # adding the button -->
-<!--     addEasyButton( -->
-<!--         easyButton(icon="fa-home", # a symbol -->
-<!--                    title="Zoom to Level 1", -->
-<!--                    onClick=JS(textFun))) -->
-
-<!-- ``` -->
-
-<!-- <!-- Now we create our interactive 'facets': --> -->
-
-<!-- ```{r, eval=FALSE, echo=FALSE} -->
-<!-- library(leafsync) -->
-<!-- final2=sync(leafDEMO2016,leafREPU2016,ncol = 2) -->
-<!-- final2 -->
-<!-- ``` -->
-
-
-<!-- _____ -->
-
-<!-- <a id='part6'></a> -->
-
-<!-- ## Deliverable III (option 1) -->
-
-<!-- This link has data from this [website](https://www.ocpf.us/Home/Index), which, similarly to our previous data, campaign and political finances. This data has a subsample for Boston. -->
-<!-- ```{r} -->
-<!-- linkBoston="https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/data/BostonContrib.xlsx" -->
-
-<!-- bostonCont=rio::import(linkBoston) -->
-
-<!-- #see it -->
-<!-- head(bostonCont) -->
-<!-- ``` -->
-
-<!-- And you have this map of zip codes: -->
-
-<!-- ```{r} -->
-<!-- library(sf) -->
-<!-- linkZips='https://raw.githubusercontent.com/DACSS-Visual/SpatialData/refs/heads/main/data/zip_codes.json' -->
-<!-- bostonZips=sf::read_sf(linkZips) -->
-<!-- #see it -->
-<!-- head(bostonZips) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- plot(bostonZips[2]) -->
-<!-- ``` -->
-
-<!-- You have this variable: -->
-<!-- ```{r} -->
-<!-- summary(bostonCont$Amount) -->
-<!-- ``` -->
-
-
-<!-- ```{r} -->
-<!-- tapply(bostonCont$Amount,bostonCont$`Tender Type Description`,summary) -->
-<!-- ``` -->
-
-<!-- Compare the contributions of **two** tender types (you choose which), by zip zode. The results can be interactive, but it is _NOT_ compulsory. -->
-
-<!-- **NOTE**: You need to aggregate the data from the excel file, and then merged that aggregated data into the map. Then, you can plot the choropleths with the data as it is (countinuous) or discretize it before plotting.  -->
-
-
-
-<!-- _____ -->
-
-<!-- [Go to table of contents.](#TOC) -->
 
 
 
