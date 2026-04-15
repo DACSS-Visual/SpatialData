@@ -5,86 +5,129 @@
 
 _____
 
-# Spatial data and Interactive maps (I)
+# Spatial data and Interactive maps 
 
 
 ```{r}
 rm(list = ls()) # start fresh
 
 library(sf)
-contrib_zipMap=st_read("contrib_polygons_light.gpkg")
-wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/refs/heads/main/maps/WA_State_Boundary.geojson')
+contrib_zipMap=st_read("https://github.com/DACSS-Visual/SpatialData/raw/main/contrib_polygons_light.gpkg")
+wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/main/maps/WA_State_Boundary.geojson')
 ```
 
 ```{r}
 names(contrib_zipMap)
 ```
 
-Interactive maps are useful when you need zooming in. I will use **leaflet** library:
+Interactive maps are useful when readers need to zoom in and explore the map directly in the browser. Here we use the `leaflet` package.
 
-```{r, eval=TRUE, message=FALSE, warning=FALSE}
+
+# A simple interactive map
+
+We begin with one example: Republican contributions in 2012.
+
+```{r}
+map_Rep2012 <- contrib_zipMap[
+  contrib_zipMap$election_year == 2012 &
+  contrib_zipMap$party == "REPUBLICAN", ]
+```
+
+## Create a color palette
+
+```{r, message=FALSE}
 library(leaflet)
+paletteFun <- colorFactor(
+  palette = "YlOrRd",
+  domain = map_Rep2012$share_contributions_cat
+)
+```
 
-# theMAP subset: republicans 2012
-map_Rep2012=contrib_zipMap[contrib_zipMap$election_year==2012 &
-                           contrib_zipMap$party=='REPUBLICAN',]
+## Create labels for hover text
 
-# create palette to fill polygons
-paletteFun=colorFactor(palette = "YlOrRd",
-                       domain = map_Rep2012$share_contributions_cat)
+```{r}
+popUp_labels <- sprintf(
+  "<strong>%s</strong>",
+  map_Rep2012$ZCTA5CE10
+) |> lapply(htmltools::HTML)
+```
 
-#popup labels when using your cursor
-popUp_labels <- sprintf("<strong>%s</strong>",
-                        map_Rep2012$ZCTA5CE10) %>% lapply(htmltools::HTML)
-
-# the base map: the WA boundaries (optional)
-base_map = leaflet() %>%
-            addTiles()%>%
-             addPolygons(data = wa_simple,
-                         fillColor = "white",
-                         weight = 0,
-                         fillOpacity = 1)
-
-# adding a layer (main map layer)
-Rep2012 = base_map %>%
-         addPolygons(data=map_Rep2012,
-                     stroke = F, # borders of polygon?
-                     opacity =  1, # # the closer to 0 the more transparent
-                     fillOpacity = 0.8, # color brigthness
-                     fillColor = ~paletteFun(share_contributions_cat),# coloring
-                     label = popUp_labels,
-                     labelOptions = labelOptions(
-                         style = list("font-weight" = "normal"),
-                         textsize = "15px",
-                         direction = "auto"))
-
+```{r}
+Rep2012 <- leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = wa_simple,
+    fillColor = "white",
+    weight = 0,
+    fillOpacity = 1
+  ) %>%
+  addPolygons(
+    data = map_Rep2012,
+    stroke = FALSE,
+    opacity = 1,
+    fillOpacity = 0.8,
+    fillColor = ~paletteFun(share_contributions_cat),
+    label = popUp_labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal"),
+      textsize = "15px",
+      direction = "auto"
+    )
+  )
 
 Rep2012
 ```
 
-You may need a legend:
-```{r, eval=TRUE}
-Rep2012 %>% addLegend(data=map_Rep2012,
-                        position = "bottomright",
-                        pal = paletteFun,
-                        values = ~share_contributions_cat,
-                        title = "Contributions",
-                        opacity = 1)
+## Add a legend
 
+```{r}
+Rep2012 %>%
+  addLegend(
+    data = map_Rep2012,
+    position = "bottomright",
+    pal = paletteFun,
+    values = ~share_contributions_cat,
+    title = "Contributions",
+    opacity = 1
+  )
 ```
 
-Let's create some kind of interactive legend:
 
-* Create subsets: here for democrats in 2012
+## Building interactive layers
+
+Now we create a map where each contribution category is a separate layer. This allows users to turn categories on and off.
+
+We use Democratic contributions in 2012.
+
 ```{r}
-theLabelsForLevels=sort(unique(contrib_zipMap$share_contributions_cat))
+theLabelsForLevels <- sort(unique(contrib_zipMap$share_contributions_cat))
 theLabelsForLevels
 ```
 
+## Filter the data
+
+Here for democrats in 2012
+
 ```{r}
-# filtering the zip map
-contribWA2012=contrib_zipMap[contrib_zipMap$election_year==2012,]
-contribWA2012_demo=contribWA2012[contribWA2012$party=='DEMOCRAT',]
+contribWA2012_demo <- contrib_zipMap[
+  contrib_zipMap$election_year == 2012 &
+  contrib_zipMap$party == "DEMOCRAT", ]
+```
+
+## Define colors
+
+Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels:
+
+```{r}
+PuOr <- c("#e66101", "#fdb863", "#b2abd2", "#5e3c99")
+theOpacity <- c(1, 0.5, 0.5, 1)
+```
+
+
+
+
+```{r}
+
 
 # these are the subsets of interest
 
@@ -95,64 +138,45 @@ map1000=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabels
 map10000=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabelsForLevels[4],]
 
 ```
+```{r}
+split_data <- split(contribWA2012_demo, contribWA2012_demo$share_contributions_cat)
 
-
-* Create a layer for each submap, and use the **group** argument. Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels:
-
-```{r, eval=TRUE}
-# from the brewer website, copy and paste:
-PuOr=c('#e66101','#fdb863','#b2abd2','#5e3c99')
-
-# one layer per group
-
-layer1= leaflet() %>%
-            addTiles() %>%
-        addPolygons(data=map10,
-                    color=PuOr[1],
-                    fillOpacity = 1, # no transparency
-                    stroke = F,
-                    group = theLabelsForLevels[1]) # LAYER as GROUP
-
-layer1_2= layer1%>%addPolygons(data=map100,
-                               color=PuOr[2],
-                               fillOpacity = 0.5, # transparency!!!
-                               stroke = F,
-                               group = theLabelsForLevels[2])
-
-
-layer1_2_3= layer1_2%>%addPolygons(data=map1000,
-                                   color=PuOr[3],fillOpacity = 0.5,stroke = F,
-                                   group = theLabelsForLevels[3])
-
-layer1_2_3_4= layer1_2_3%>%addPolygons(data=map10000,
-                                   color=PuOr[4],fillOpacity = 1,stroke = F,
-                                   group = theLabelsForLevels[4])
-
-layer1_2_3_4
 ```
 
-* Let's add a _button_ that helps rezooming:
-
-```{r, eval=TRUE}
-textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
-
-finalZoom= layer1_2_3_4 %>%
-    addEasyButton(
-        easyButton(icon="fa-home", # a symbol
-                   title="Zoom to Level 1",
-                   onClick=JS(textFun)))
-
-finalZoom
+```{r}
 ```
 
-* Add an 'interactive legend' using the groups we previously defined:
 
-```{r, eval=TRUE}
+```{r}
+1:length(split_data)
+```
+```{r}
+map2012_demo <- leaflet() %>% addTiles()
 
-finalZoomLayers=finalZoom %>% addLayersControl(
-        overlayGroups = theLabelsForLevels,
-        options = layersControlOptions(collapsed = FALSE))
-finalZoomLayers
+for (i in 1:length(split_data)) {
+    submap <- split_data[[i]]
+map2012_demo <- map2012_demo %>%
+      addPolygons(
+        data = submap,
+        color = PuOr[i],
+        fillOpacity = theOpacity[i],
+        stroke = FALSE,
+        group = names(split_data)[i]
+      )}
+map2012_demo
+```
+
+```{r}
+textFun <- "function(btn, map){map.setView([47.751076, -120.740135], 7)}"
+
+finalZoom <- map2012_demo %>%
+  addEasyButton(
+    easyButton(
+      icon = "fa-home",
+      title = "Zoom to Washington",
+      onClick = JS(textFun)
+    )
+  )
 ```
 
 ## Facetting
