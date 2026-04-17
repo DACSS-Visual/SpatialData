@@ -1025,6 +1025,11 @@ st_write(contriWA_1216_RD_points,
 ```
 
 
+The interactive maps are here:
+
+[map1](https://github.com/DACSS-Visual/SpatialData/blob/main/interactive.html)
+[map2](https://github.com/DACSS-Visual/SpatialData/raw/main/interactive.html)
+[map3](interactive.html)
 
 [Go to table of contents.](#TOC)
 
