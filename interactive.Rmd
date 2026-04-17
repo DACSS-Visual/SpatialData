@@ -1,11 +1,11 @@
 
-<br> 
+<br>
 <center><img src="https://i.imgur.com/AbCCpQO.png" width="700"></center>
 
 
 _____
 
-# Spatial data and Interactive maps 
+# Spatial data and Interactive maps
 
 
 ```{r}
@@ -20,7 +20,7 @@ wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/main/maps/
 names(contrib_zipMap)
 ```
 
-Interactive maps are useful when readers need to zoom in and explore the map directly in the browser. Here we use the `leaflet` package. 
+Interactive maps are useful when readers need to zoom in and explore the map directly in the browser. Here we use the `leaflet` package.
 
 # A simple interactive map
 
@@ -37,14 +37,14 @@ leafletObject
 Given we have the `wa_simple` object, we simply **add** its polygons:
 
 ```{r}
-leafletObject%>% 
+leafletObject%>%
   addPolygons(
     data = wa_simple)
 ```
 
 Let's add some details to create our `baseMap`:
 ```{r}
-baseMap<-leafletObject%>% 
+baseMap<-leafletObject%>%
   addPolygons(
     data = wa_simple,
     fillColor = "white", #polygon(s) fill color
@@ -149,7 +149,7 @@ Rep2012 %>%
 ```
 
 
-# Interacting layers with legend 
+# Interacting layers with legend
 
 Now we create a map where each contribution category is a separate layer. This allows users to turn categories on and off.
 
@@ -223,87 +223,123 @@ for (i in 1:length(demo_splitted)) {
                           # this is the most important!!
                           group = names(demo_splitted)[i]
                         )}
-map2012_demo  
+map2012_demo
 ```
 
 ABove you see o difference, but here you will the effect of `group = names(demo_splitted)[i]`
 ```{r}
-map2012_demo <- map2012_demo %>% 
+map2012_demo <- map2012_demo %>%
                   addLayersControl(
                     overlayGroups = theLabelsForLevels,
                     options = layersControlOptions(collapsed = FALSE))
 
-map2012_demo 
+map2012_demo
 ```
 
 
 Notice that if you start zooming in, it might be difficult to go back to a whole view of our main map. Leaflet does not give you a **home** button by default. This code helps you with that:
 ```{r}
+# prepare the button with the coordinate and zoom level (7)
 textFun <- "function(btn, map){map.setView([47.751076, -120.740135], 7)}"
 
+## adding it
 finalZoom <- map2012_demo %>%
-  addEasyButton(
-    easyButton(
-      icon = "fa-home",
-      title = "Zoom to Washington",
-      onClick = JS(textFun)
-    )
-  )
+                addEasyButton(
+                  easyButton(
+                    icon = "fa-home",
+                    title = "Zoom to Washington",
+                    onClick = JS(textFun)
+                  )
+                )
+  
 finalZoom
 ```
 
-## Facetting
 
-Facetting is not straightforward. If we use the previous map, we can build another one for democrats:
-
-```{r, eval=TRUE}
-# creating sub maps
-contribWA2016=contrib_zipMap[contrib_zipMap$election_year==2016,]
-contribWA2016_demo=contribWA2016[contribWA2016$party=='DEMOCRAT',]
-
-map10b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[1],]
-map100b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[2],]
-map1000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[3],]
-map10000b=contribWA2016_demo[contribWA2016_demo$share_contributions_cat==theLabelsForLevels[4],]
-
-# plotting
-
-layer1b= leaflet() %>%
-            addTiles() %>%
-        addPolygons(data=map10b,
-                    color=PuOr[1],fillOpacity = 1,stroke = F,
-                    group = theLabelsForLevels[1]) # LAYER as GROUP
-
-layer1_2b= layer1%>%addPolygons(data=map100b,
-                               color=PuOr[2],fillOpacity = 0.5,stroke = F,
-                               group = theLabelsForLevels[2])
-
-
-layer1_2_3b= layer1_2%>%addPolygons(data=map1000b,
-                                   color=PuOr[3],fillOpacity = 0.5,stroke = F,
-                                   group = theLabelsForLevels[3])
-
-layer1_2_3_4b= layer1_2_3%>%addPolygons(data=map10000b,
-                                   color=PuOr[4],fillOpacity = 1,stroke = F,
-                                   group = theLabelsForLevels[4])
-
-textFun="function(btn, map){map.setView([47.751076, -120.740135], 7)}"
-
-# Let's not request the HOME button..
-
-finalLayersb=layer1_2_3_4b %>% addLayersControl(
-        overlayGroups = theLabelsForLevels,
-        options = layersControlOptions(collapsed = FALSE))
-```
-
-Does this help? You need *leafsync* library:
+# Interactive maps of spatial points
 
 ```{r}
-library(leafsync)
-finalFacet=sync(finalZoomLayers,finalLayersb,ncol = 2)
-finalFacet
+library(sf)
+contriWA_1216_RD_points=st_read("contrib_points.gpkg")
+
 ```
 
 
+**Leaflet** is a good option too for spatial points. But not all strategies are good. 
+
+This strategy will plot every point, but since they are more than 300 000, that might not be a good idea (I will not run this code, but you can try it) : 
+
+```{r, eval=FALSE,warning=FALSE, echo=TRUE}
+
+leaflet(contriWA_1216_RD_points) %>%
+    addTiles() %>%
+    addCircleMarkers(stroke = F, radius = 0.5)
+```
+
+Leaflet offers this smart alternative:
+```{r}
+leaflet(contriWA_1216_RD_points) %>%
+    addTiles() %>%
+    addCircleMarkers(stroke = F, 
+                     clusterOptions = markerClusterOptions())
+
+```
+
+The previous map aggregated all the data and show you the counts by closeness, which changes dynamically as you zoom in or out. Let me split by party for 2016:
+
+* Subsetting
+
+```{r}
+sub2016=contriWA_1216_RD_points[contriWA_1216_RD_points$election_year==2016,]
+```
+
+
+* Splitting
+```{r}
+splitted_2016 <- split(x = sub2016,
+                       f = sub2016$party)
+names(splitted_2016)
+```
+
+* Creating the maps
+
+```{r, warning=FALSE, eval=TRUE, echo=TRUE}
+
+leafDEMO2016=leaflet(splitted_2016$DEMOCRAT) %>%
+    addTiles() %>%
+    addCircleMarkers(clusterOptions = markerClusterOptions())
+
+leafREPU2016=leaflet(splitted_2016$REPUBLICAN) %>%
+    addTiles() %>%
+    addCircleMarkers(clusterOptions = markerClusterOptions())
+
+```
+
+
+## Simulating facets
+
+Above, we just created two maps. Let's see use `leafsync` to "facet" manually:
+
+```{r, eval=TRUE, echo=TRUE, fig.height=8}
+library(leafsync)
+facet2026=sync(leafDEMO2016,leafREPU2016,ncol = 2)
+facet2026
+```
+This "interactive facet" can be improved if we add the home button! 
+
+```{r, eval=TRUE, echo=TRUE, fig.width=12}
+
+
+leafREPU2016<-leafREPU2016%>%
+    # adding the button
+    addEasyButton(
+        easyButton(icon="fa-home", # a symbol
+                   title="Zoom to Level 1",
+                   onClick=JS(textFun)))
+
+
+facet2026=sync(leafDEMO2016,leafREPU2016,ncol = 2)
+facet2026
+```
 
 
