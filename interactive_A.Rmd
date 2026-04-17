@@ -20,12 +20,49 @@ wa_simple <- read_sf('https://github.com/DACSS-Visual/SpatialData/raw/main/maps/
 names(contrib_zipMap)
 ```
 
-Interactive maps are useful when readers need to zoom in and explore the map directly in the browser. Here we use the `leaflet` package.
-
+Interactive maps are useful when readers need to zoom in and explore the map directly in the browser. Here we use the `leaflet` package. 
 
 # A simple interactive map
 
+Leaflet works like this:
+```{r}
+library(leaflet)
+
+leafletObject<- leaflet() %>% # create the leaflet object
+                  addTiles() # add the background
+leafletObject
+```
+
+
+Given we have the `wa_simple` object, we simply **add** its polygons:
+
+```{r}
+leafletObject%>% 
+  addPolygons(
+    data = wa_simple)
+```
+
+Let's add some details to create our `baseMap`:
+```{r}
+baseMap<-leafletObject%>% 
+  addPolygons(
+    data = wa_simple,
+    fillColor = "white", #polygon(s) fill color
+    weight = 0,    # border width
+    fillOpacity = 1) # 0 is totally trasparent, 1 full color
+
+baseMap
+
+```
+
+
+
+# A simple choropleth
+
+
 We begin with one example: Republican contributions in 2012.
+
+### 1. Subset to create `map_Rep2012`:
 
 ```{r}
 map_Rep2012 <- contrib_zipMap[
@@ -33,80 +70,97 @@ map_Rep2012 <- contrib_zipMap[
   contrib_zipMap$party == "REPUBLICAN", ]
 ```
 
-## Create a color palette
+### 2. Create a color palette for **share_contributions_cat** using `colorFactor()`:
 
 ```{r, message=FALSE}
-library(leaflet)
+
 paletteFun <- colorFactor(
-  palette = "YlOrRd",
-  domain = map_Rep2012$share_contributions_cat
-)
+                  palette = "YlOrRd",
+                  domain = map_Rep2012$share_contributions_cat
+              )
 ```
 
-## Create labels for hover text
+### 3. Commonly, we create labels for hover text
 
 ```{r}
 popUp_labels <- sprintf(
-  "<strong>%s</strong>",
-  map_Rep2012$ZCTA5CE10
-) |> lapply(htmltools::HTML)
+                  "<strong>%s</strong>",
+                  map_Rep2012$ZCTA5CE10
+                ) |> lapply(htmltools::HTML)
 ```
 
+### 4. First draft, adding the polygons from `map_Rep2012`
+
 ```{r}
-Rep2012 <- leaflet() %>%
-  addTiles() %>%
+Rep2012 <- baseMap %>%
   addPolygons(
-    data = wa_simple,
-    fillColor = "white",
-    weight = 0,
-    fillOpacity = 1
-  ) %>%
-  addPolygons(
-    data = map_Rep2012,
-    stroke = FALSE,
-    opacity = 1,
-    fillOpacity = 0.8,
-    fillColor = ~paletteFun(share_contributions_cat),
-    label = popUp_labels,
-    labelOptions = labelOptions(
-      style = list("font-weight" = "normal"),
-      textsize = "15px",
-      direction = "auto"
-    )
+    data = map_Rep2012
   )
 
 Rep2012
 ```
 
-## Add a legend
+
+### 5. Now add the fill color
+
+```{r}
+Rep2012 <- baseMap %>%
+  addPolygons(
+    data = map_Rep2012,
+    fillColor = ~paletteFun(share_contributions_cat)
+  )
+
+Rep2012
+```
+
+### 6. Final Touches
+
+* **Retouching the polygons:**
+
+```{r}
+Rep2012 <- baseMap %>%
+  addPolygons(
+    data = map_Rep2012,
+    fillColor = ~paletteFun(share_contributions_cat),
+    stroke = FALSE,# no border
+    fillOpacity = 0.8, # improve light
+    label = popUp_labels, #text when hovering
+    ## optional
+    labelOptions = labelOptions(
+      textsize = "15px") # change size of text
+  )
+
+Rep2012
+
+```
+
+
+* **Adding a legend**
 
 ```{r}
 Rep2012 %>%
   addLegend(
     data = map_Rep2012,
-    position = "bottomright",
-    pal = paletteFun,
     values = ~share_contributions_cat,
+    pal = paletteFun,
     title = "Contributions",
-    opacity = 1
+    position = "bottomright"
   )
 ```
 
 
-## Building interactive layers
+# Interacting layers with legend 
 
 Now we create a map where each contribution category is a separate layer. This allows users to turn categories on and off.
 
-We use Democratic contributions in 2012.
+We use Democratic contributions in 2012. Remember we have these levels:
 
 ```{r}
 theLabelsForLevels <- sort(unique(contrib_zipMap$share_contributions_cat))
 theLabelsForLevels
 ```
 
-## Filter the data
-
-Here for democrats in 2012
+Let's subset to keep democrats in 2012
 
 ```{r}
 contribWA2012_demo <- contrib_zipMap[
@@ -114,58 +168,76 @@ contribWA2012_demo <- contrib_zipMap[
   contrib_zipMap$party == "DEMOCRAT", ]
 ```
 
-## Define colors
 
-Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels:
+Different than before, we will write the color manually. Let's use a color safe [palette] (https://colorbrewer2.org/). Here I will use the colors of the diverging palette "PuOr" for 4 levels (I will copy and paste them into a vector). Notice I will use _transparency_('fillOpacity') for the most common levels:
 
 ```{r}
+# the colors
 PuOr <- c("#e66101", "#fdb863", "#b2abd2", "#5e3c99")
+
+# the opacity for each
 theOpacity <- c(1, 0.5, 0.5, 1)
 ```
 
 
+Let's take advantage of the `split()` function:
 
 
 ```{r}
-
-
-# these are the subsets of interest
-
-
-map10=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabelsForLevels[1],]
-map100=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabelsForLevels[2],]
-map1000=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabelsForLevels[3],]
-map10000=contribWA2012_demo[contribWA2012_demo$share_contributions_cat==theLabelsForLevels[4],]
+demo_splitted <- split(x = contribWA2012_demo,
+                       f = contribWA2012_demo$share_contributions_cat)
 
 ```
-```{r}
-split_data <- split(contribWA2012_demo, contribWA2012_demo$share_contributions_cat)
 
-```
+
+`demo_splitted` is a list of 4 dataframes, one for each category in **share_contributions_cat**
 
 ```{r}
+length(demo_splitted)
 ```
 
+Take a look at this *old-fashioned* for loop:
+```{r}
+
+for (i in 1:length(demo_splitted)) {
+      print(dim(demo_splitted[[i]])) # the dataframe i's dimensions
+      print(PuOr[i]) # the dataframe i's color
+      print(theOpacity[i]) # the dataframe i's opacity
+      print(names(demo_splitted)[i]) # the dataframe i's group or category
+
+  }
+```
+
+As you see, you can visit those important objects in parallel. Let's use that to build the FOUR leaflet maps, and plot one on top of the other:
 
 ```{r}
-1:length(split_data)
+map2012_demo <- baseMap
+
+for (i in 1:length(demo_splitted)) {
+      map2012_demo <- map2012_demo %>%
+                        addPolygons(
+                          stroke = FALSE,
+                          data = demo_splitted[[i]],
+                          color = PuOr[i],
+                          fillOpacity = theOpacity[i],
+                          # this is the most important!!
+                          group = names(demo_splitted)[i]
+                        )}
+map2012_demo  
 ```
+
+ABove you see o difference, but here you will the effect of `group = names(demo_splitted)[i]`
 ```{r}
-map2012_demo <- leaflet() %>% addTiles()
+map2012_demo <- map2012_demo %>% 
+                  addLayersControl(
+                    overlayGroups = theLabelsForLevels,
+                    options = layersControlOptions(collapsed = FALSE))
 
-for (i in 1:length(split_data)) {
-    submap <- split_data[[i]]
-map2012_demo <- map2012_demo %>%
-      addPolygons(
-        data = submap,
-        color = PuOr[i],
-        fillOpacity = theOpacity[i],
-        stroke = FALSE,
-        group = names(split_data)[i]
-      )}
-map2012_demo
+map2012_demo 
 ```
 
+
+Notice that if you start zooming in, it might be difficult to go back to a whole view of our main map. Leaflet does not give you a **home** button by default. This code helps you with that:
 ```{r}
 textFun <- "function(btn, map){map.setView([47.751076, -120.740135], 7)}"
 
@@ -177,6 +249,7 @@ finalZoom <- map2012_demo %>%
       onClick = JS(textFun)
     )
   )
+finalZoom
 ```
 
 ## Facetting
